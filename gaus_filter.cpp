@@ -55,9 +55,9 @@ int main()
 	imshow("src_image", src_image);
 
 	GetgaussianKernel();//生成高斯卷积核矩阵
-	Mat kern_low = Mat(size, size, CV_64F, gaus);
+	Mat kern = Mat(size, size, CV_64F, gaus);
 	Mat dst_image_low,dst_image_high;
-	filter2D(src_image, dst_image_low, src_image.depth(), kern_low);
+	filter2D(src_image, dst_image_low, src_image.depth(), kern);
 	//addWeighted方法进行图像相减
 	addWeighted(src_image, 1, dst_image_low, -1, 0, dst_image_high);
 
