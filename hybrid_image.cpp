@@ -7,8 +7,8 @@
 using namespace std;
 using namespace cv;
 
-#define size 35//卷积核大小
-#define sigma 10//sigma越大，平滑效果越明显
+#define size 13//卷积核大小
+#define sigma 4//sigma越大，平滑效果越明显
 
 double gaus[size][size];
 
@@ -46,22 +46,33 @@ Mat conv(Mat src, Mat kern)
 	int col1 = src.cols;
 	int row2 = kern.rows;
 	int col2 = kern.cols;
-	for (int k = 0; k < 3; k++)
+
+	//int border1 = (row2 - 1)/2;
+	//int border2 = (col2 - 1)/2;
+	//原图片扩展0
+	copyMakeBorder(src, src, col2, col2, row2, row2, BorderTypes::BORDER_DEFAULT);
+
+	for (int i = row2; i < row1 + row2; i++)
 	{
-		for (int i = 0; i < row1 - row2; i++)
+		for (int j = col2; j < col1 + col2; j++)
 		{
-			for (int j = 0; j < col1 - col2; j++)
+			double r = 0, g = 0, b = 0;
+			int temp = 0;
+			for (int ix = 0; ix < row2; ix++)
 			{
-				int temp = 0;
-				for (int ix = 0; ix < row2; ix++)
-					for (int iy = 0; iy < col2; iy++)
-						temp += src.at<Vec3b>(i + ix, j + iy)[k] * kern.at<double>(ix, iy);
-				if (temp > 255)
-					temp = 255;
-				if (temp < 0)
-					temp = 0;
-				out.at<Vec3b>(i, j)[k] = temp;
+				for (int iy = 0; iy < col2; iy++)
+				{
+					Vec3b rgb = src.at<Vec3b>(i + ix, j + iy);
+					r += rgb[0] * kern.at<double>(ix, iy);
+					g += rgb[1] * kern.at<double>(ix, iy);
+					b += rgb[2] * kern.at<double>(ix, iy);
+				}
 			}
+			if (r > 255) r = 255;
+			if (g > 255) g = 255;
+			if (b > 255) b = 255;
+			Vec3b rgb_dst = { static_cast<uchar>(r), static_cast<uchar>(g),static_cast<uchar>(b) };
+			out.at<Vec3b>(i - row2, j - col2) = rgb_dst;
 		}
 	}
 	return out;
@@ -117,15 +128,16 @@ int main()
 	//	1, 1, 1);
 	Mat dst_low, dst_high, dst;
 
-	filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
-	//dst_low = conv(src_image1, gaus_kern);
+	//filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
+	dst_low = conv(src_image1, gaus_kern);
 	namedWindow("low_pass", WINDOW_AUTOSIZE);
 	imshow("low_pass", dst_low);
-	
+
 	Mat dst_temp;
 	//filter2D(src_image2, dst_high, src_image2.depth(), lap_kern);
 	//dst_high = conv(src_image2, lap_kern);
-	filter2D(src_image2, dst_temp, src_image2.depth(), gaus_kern);
+	//filter2D(src_image2, dst_temp, src_image2.depth(), gaus_kern);
+	dst_temp = conv(src_image2, gaus_kern);
 	addWeighted(src_image2, 1, dst_temp, -1, 0, dst_high);
 	namedWindow("high_pass", WINDOW_AUTOSIZE);
 	imshow("high_pass", dst_high);

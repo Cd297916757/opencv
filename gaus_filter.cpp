@@ -7,8 +7,8 @@
 using namespace std;
 using namespace cv;
 
-#define size 3//卷积核大小
-#define sigma 1.5//sigma越大，平滑效果越明显
+#define size 35//卷积核大小
+#define sigma 3//sigma越大，平滑效果越明显
 
 double gaus[size][size];
 
