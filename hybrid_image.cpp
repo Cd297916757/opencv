@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -7,8 +7,8 @@
 using namespace std;
 using namespace cv;
 
-#define size 3//卷积核大小
-#define sigma 3//sigma越大，平滑效果越明显
+#define size 35//卷积核大小
+#define sigma 10//sigma越大，平滑效果越明显
 
 double gaus[size][size];
 
@@ -42,19 +42,20 @@ void GetgaussianKernel()
 Mat conv(Mat src, Mat kern)
 {
 	Mat out = src.clone();
-	int row = src.rows;
-	int col = src.cols;
-	
-	for (int k = 0; k < 3; k++) 
+	int row1 = src.rows;
+	int col1 = src.cols;
+	int row2 = kern.rows;
+	int col2 = kern.cols;
+	for (int k = 0; k < 3; k++)
 	{
-		for (int i = 1; i < row - 1; i++) 
+		for (int i = 0; i < row1 - row2; i++)
 		{
-			for (int j = 1; j < col - 1; j++) 
+			for (int j = 0; j < col1 - col2; j++)
 			{
 				int temp = 0;
-				for (int iy = 0; iy < size; iy++)
-					for (int ix = 0; ix < size; ix++)
-						temp += src.at<Vec3b>(i - 1 + iy, j - 1 + ix)[k] * kern.at<double>(iy, ix);
+				for (int ix = 0; ix < row2; ix++)
+					for (int iy = 0; iy < col2; iy++)
+						temp += src.at<Vec3b>(i + ix, j + iy)[k] * kern.at<double>(ix, iy);
 				if (temp > 255)
 					temp = 255;
 				if (temp < 0)
@@ -79,7 +80,6 @@ Mat add(Mat mat1, Mat mat2, double alpha)
 			for (int j = 1; j < col - 1; j++)
 			{
 				temp = alpha * out.at<Vec3b>(i, j)[k] + (1.0 - alpha)*mat2.at<Vec3b>(i, j)[k];
-
 				if (temp > 255)
 					temp = 255;
 				else if (temp < 0)
@@ -93,8 +93,8 @@ Mat add(Mat mat1, Mat mat2, double alpha)
 
 int main()
 {
-	Mat src_image1 = imread("cat.bmp");
-	Mat src_image2 = imread("dog.bmp");
+	Mat src_image1 = imread("dog.bmp");
+	Mat src_image2 = imread("cat.bmp");
 	//判断图像是否加载成功
 	if (src_image1.data && src_image2.data)
 		cout << "图像加载成功!" << endl << endl;
@@ -111,57 +111,30 @@ int main()
 
 	GetgaussianKernel();//生成高斯卷积核矩阵
 	Mat gaus_kern = Mat(size, size, CV_64F, gaus);
-	Mat lap_kern = (Mat_<double>(3, 3) <<
-		1, 1, 1,
-		1, -8, 1,
-		1, 1, 1);
+	//Mat lap_kern = (Mat_<double>(3, 3) <<
+	//	1, 1, 1,
+	//	1, -8, 1,
+	//	1, 1, 1);
 	Mat dst_low, dst_high, dst;
 
-	//filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
-	dst_low = conv(src_image1, gaus_kern);
+	filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
+	//dst_low = conv(src_image1, gaus_kern);
 	namedWindow("low_pass", WINDOW_AUTOSIZE);
 	imshow("low_pass", dst_low);
-
+	
+	Mat dst_temp;
 	//filter2D(src_image2, dst_high, src_image2.depth(), lap_kern);
-	Mat src_gray = src_image2.clone();
-	//src_image2 = conv(src_image2, gaus_kern);
-	cvtColor(src_image2, src_gray, COLOR_RGB2GRAY);
-	Laplacian(src_gray, dst_high, CV_16S, size, 1, 0, BORDER_DEFAULT);
-	Mat abs_dst_high;
-	convertScaleAbs(dst_high, abs_dst_high);
+	//dst_high = conv(src_image2, lap_kern);
+	filter2D(src_image2, dst_temp, src_image2.depth(), gaus_kern);
+	addWeighted(src_image2, 1, dst_temp, -1, 0, dst_high);
 	namedWindow("high_pass", WINDOW_AUTOSIZE);
-	imshow("high_pass", abs_dst_high);
+	imshow("high_pass", dst_high);
 
 	namedWindow("hybrid_image", WINDOW_AUTOSIZE);
 	//addWeighted(dst_low, 1, dst_high, 1, 0, dst);
-	//dst = add(dst_low, abs_dst_high, 0.5);
-	Mat out = abs_dst_high.clone();
-	int row = abs_dst_high.rows;
-	int col = abs_dst_high.cols;
-	int temp = 0;
-	for (int k = 0; k < 3; k++)
-	{
-		for (int i = 1; i < row - 1; i++)
-		{
-			for (int j = 1; j < col - 1; j++)
-			{
-				cout << out.at<Vec3b>(i, j)[k]<<" ";
-			}
-			cout << endl;
-		}
-	}
-	dst = add(abs_dst_high, abs_dst_high, 0.5);
+	dst = add(dst_low, dst_high, 0.5);
 	imshow("hybrid_image", dst);
 
 	waitKey(0);
 	return 0;
 }
-/*
-0,1,0,
-1,-4,1,
-0,1,0
-
-1,1,1,
-1,-8,1,
-1,1,1
-*/
