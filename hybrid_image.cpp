@@ -7,8 +7,8 @@
 using namespace std;
 using namespace cv;
 
-#define size 13//卷积核大小
-#define sigma 4//sigma越大，平滑效果越明显
+#define size 31//卷积核大小
+#define sigma 10//sigma越大，平滑效果越明显
 
 double gaus[size][size];
 
@@ -50,7 +50,7 @@ Mat conv(Mat src, Mat kern)
 	//int border1 = (row2 - 1)/2;
 	//int border2 = (col2 - 1)/2;
 	//原图片扩展0
-	copyMakeBorder(src, src, col2, col2, row2, row2, BorderTypes::BORDER_DEFAULT);
+	copyMakeBorder(src, src, col2, col2, row2, row2, BorderTypes::BORDER_DEFAULT);//BORDER_REPLICATE
 
 	for (int i = row2; i < row1 + row2; i++)
 	{
@@ -128,23 +128,28 @@ int main()
 	//	1, 1, 1);
 	Mat dst_low, dst_high, dst;
 
-	//filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
-	dst_low = conv(src_image1, gaus_kern);
+	filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
+	//dst_low = conv(src_image1, gaus_kern);
 	namedWindow("low_pass", WINDOW_AUTOSIZE);
 	imshow("low_pass", dst_low);
+
+	//Mat A33(3, 3, CV_32F, Scalar(5));
 
 	Mat dst_temp;
 	//filter2D(src_image2, dst_high, src_image2.depth(), lap_kern);
 	//dst_high = conv(src_image2, lap_kern);
-	//filter2D(src_image2, dst_temp, src_image2.depth(), gaus_kern);
-	dst_temp = conv(src_image2, gaus_kern);
+	filter2D(src_image2, dst_temp, src_image2.depth(), gaus_kern);
+
+	src_image2 += Scalar::all(12);
+
+	//dst_temp = conv(src_image2, gaus_kern);
 	addWeighted(src_image2, 1, dst_temp, -1, 0, dst_high);
 	namedWindow("high_pass", WINDOW_AUTOSIZE);
 	imshow("high_pass", dst_high);
 
 	namedWindow("hybrid_image", WINDOW_AUTOSIZE);
 	//addWeighted(dst_low, 1, dst_high, 1, 0, dst);
-	dst = add(dst_low, dst_high, 0.5);
+	dst = add(dst_low, dst_high, 0.6);
 	imshow("hybrid_image", dst);
 
 	waitKey(0);
