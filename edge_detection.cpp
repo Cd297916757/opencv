@@ -8,13 +8,13 @@ using namespace std;
 using namespace cv;
 
 //做边缘检测不需要图像太过模糊
-#define size 3//卷积核大小
+#define k_size 3//卷积核大小
 #define sigma 1//sigma越大，平滑效果越明显
 //双阈值检测
 #define high_threshold 100
 #define low_threshold 2
 
-double gaus[size][size];
+double gaus[k_size][k_size];
 
 bool Max(uchar x, uchar a, uchar b)
 {
@@ -27,19 +27,19 @@ bool Max(uchar x, uchar a, uchar b)
 void GetgaussianKernel()
 {
 	const double PI = 4.0*atan(1.0);//π
-	int center = size / 2;
+	int center = k_size / 2;
 	double sum = 0;
 
-	for (int i = 0; i < size; i++)
+	for (int i = 0; i < k_size; i++)
 	{
-		for (int j = 0; j < size; j++)
+		for (int j = 0; j < k_size; j++)
 		{
 			gaus[i][j] = exp(-((i - center)*(i - center) + (j - center)*(j - center)) / (2 * sigma*sigma));
 			sum += gaus[i][j];
 		}
 	}
-	for (int i = 0; i < size; i++)
-		for (int j = 0; j < size; j++)
+	for (int i = 0; i < k_size; i++)
+		for (int j = 0; j < k_size; j++)
 			gaus[i][j] /= sum;
 }
 
@@ -47,37 +47,54 @@ Mat GaussianFilter(Mat src)
 {
 	Mat dst;
 	GetgaussianKernel();//生成高斯卷积核矩阵
-	Mat gaus_kern = Mat(size, size, CV_64F, gaus);
+	Mat gaus_kern = Mat(k_size, k_size, CV_64F, gaus);
 	filter2D(src, dst, src.depth(), gaus_kern);
-	namedWindow("gaussian_filter", WINDOW_AUTOSIZE);
-	imshow("gaussian_filter", dst);
+	//namedWindow("gaussian_filter", WINDOW_AUTOk_size);
+	//imshow("gaussian_filter", dst);
 	return dst;
 }
 
 //计算梯度值和梯度方向
 void SobelFilter(Mat src, Mat val, Mat dir)
 {
-	Mat sobel_x = (Mat_<uchar>(3, 3) <<
+	Mat sobel_x = (Mat_<double>(3, 3) <<
 		1, 0, -1,
 		2, 0, -2,
 		1, 0, -1);
-	Mat sobel_y = (Mat_<uchar>(3, 3) <<
+	Mat sobel_y = (Mat_<double>(3, 3) <<
 		1, 2, 1,
 		0, 0, 0,
 		1, -2, -1);
 	Mat gradient_x, gradient_y;
 	filter2D(src, gradient_x, src.depth(), sobel_x);
 	filter2D(src, gradient_y, src.depth(), sobel_y);
-	//x,y平方和开方计算量过大，用两数绝对值来代替
-	//精度可能不够会影响结果
-	val = abs(gradient_x) + abs(gradient_y);
 
+	//不能用绝对值相加近似，y轴方向的梯度很多255
+	//Mat temp = gradient_x.clone();
+	//Mat temp(gradient_x.size(), gradient_x.type());
+	//magnitude(gradient_x, gradient_y, temp);
+	Mat gx, gy;
+	Sobel(src, gx, src.depth(), 1, 0, 3);
+	Sobel(src, gy, src.depth(), 0, 1, 3);
+
+	Mat mag(gx.size(), gx.type());
+	magnitude(gx, gy, mag);
+	//-------------debug-------------------
+	//int row1 = gradient_x.rows;
+	//int col1 = gradient_x.cols;
+	//for (int i = 0; i < row1; i++)
+	//{
+	//	for (int j = 0; j < col1; j++)
+	//			cout << (int)gradient_y.at<uchar>(i, j) << " ";
+	//	cout << endl;
+	//}
+	//--------------------------------------
 	int row = src.rows;
 	int col = src.cols;
 	for (int i = 0; i < row; i++)
 		for (int j = 0; j < col; j++)
 			dir.at<uchar>(i, j) = atan2(gradient_y.at<uchar>(i, j), gradient_x.at<uchar>(i, j));
-			//dir.at<uchar>(i, j) = atan2(gradient_x.at<uchar>(i, j), gradient_y.at<uchar>(i, j));
+	//dir.at<uchar>(i, j) = atan2(gradient_x.at<uchar>(i, j), gradient_y.at<uchar>(i, j));
 }
 
 //val不符合要求的值置为0
@@ -180,23 +197,26 @@ int main()
 	gradient_dir = src_gray.clone();
 	SobelFilter(src_gray, gradient_val, gradient_dir);
 
-	//非极大值抑制
-	NonMaxSuppression(gradient_val, gradient_dir);
+	////非极大值抑制
+	//NonMaxSuppression(gradient_val, gradient_dir);
 
-	//双阈值检测
-	edge = gradient_val.clone();
-	ThresholdDetection(gradient_val, edge);
+	////双阈值检测
+	//edge = gradient_val.clone();
+	//ThresholdDetection(gradient_val, edge);
 
-	//最后确定边缘
-	int row = gradient_val.rows;
-	int col = gradient_val.cols;
-	for (int i = 0; i < row; i++)
-		for (int j = 0; j < col; j++)
-			if (edge.at<uchar>(i,j) == 0)
-				gradient_val.at<uchar>(i,j) = 0;
-
-	namedWindow("edge_detection", WINDOW_AUTOSIZE);
-	imshow("edge_detection", gradient_val);
+	////最后确定边缘
+	//int row = gradient_val.rows;
+	//int col = gradient_val.cols;
+	//for (int i = 0; i < row; i++)
+	//{
+	//	for (int j = 0; j < col; j++)
+	//	{
+	//		if (edge.at<uchar>(i, j) == 0)
+	//			gradient_val.at<uchar>(i, j) = 0;
+	//	}
+	//}
+	//namedWindow("edge_detection", WINDOW_AUTOk_size);
+	//imshow("edge_detection", gradient_val);
 
 	waitKey(0);
 	return 0;
