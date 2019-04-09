@@ -10,7 +10,7 @@ using namespace cv;
 
 #define k_size 3//卷积核大小
 #define sigma 1//sigma越大，平滑效果越明显
-#define high_threshold 100
+//#define high_threshold 100
 //#define low_threshold 40
 
 class node {
@@ -28,6 +28,7 @@ public:
 	}
 };
 
+int high_threshold = 100;
 int low_threshold = 0;
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
@@ -158,6 +159,7 @@ void NonMaxSuppression(Mat dir)
 
 void ThresholdDetection(int, void*)
 {
+	high_threshold = low_threshold * 3;
 	dst = val.clone();
 	area = edge.clone();
 	int row = val.rows;
@@ -320,7 +322,7 @@ int main()
 
 	namedWindow("edge_detection", WINDOW_AUTOSIZE);
 	//建立滑杆获取低阈值输入
-	createTrackbar("Min Threshold:", "edge_detection", &low_threshold, high_threshold, ThresholdDetection);
+	createTrackbar("Min Threshold:", "edge_detection", &low_threshold, 100, ThresholdDetection);
 
 	waitKey(0);
 	return 0;
