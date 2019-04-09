@@ -7,15 +7,16 @@
 using namespace std;
 using namespace cv;
 
-//做边缘检测不需要图像太过模糊
 #define k_size 3//卷积核大小
 #define sigma 1//sigma越大，平滑效果越明显
-//双阈值检测
 #define high_threshold 100
-#define low_threshold 40
+//#define low_threshold 40
 
+int low_threshold = 0;
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
+
+Mat val, edge, dst;
 
 bool Max(uchar x, uchar a, uchar b)
 {
@@ -55,7 +56,7 @@ Mat GaussianFilter(Mat src)
 }
 
 //计算梯度值和梯度方向
-void SobelFilter(Mat src, Mat &val, Mat &dir)
+void SobelFilter(Mat src, Mat &dir)
 {
 	//Mat sobel_x = (Mat_<uchar>(3, 3) <<
 	//	1, 0, -1,
@@ -92,26 +93,13 @@ void SobelFilter(Mat src, Mat &val, Mat &dir)
 	//}
 
 	//默认返回的是弧度制，换算成角度制
-	//uchar没有负数，错误,结果没有负数
 	for (int i = 0; i < row; i++)
 		for (int j = 0; j < col; j++)
 			dir.at<double>(i, j) = atan2(gy.at<double>(i, j), gx.at<double>(i, j)) * 180/PI;
-			//dir.at<double>(i, j) = atan2(gx.at<uchar>(i, j), gy.at<uchar>(i, j))* 180/PI;
-
-	//-------------debug-------------------
-	//int r1 = gx.rows;
-	//int c1 = gx.cols;
-	//for (int i = 0; i < r1; i++)
-	//{
-	//	for (int j = 0; j < c1; j++)
-	//		cout << dir.at<double>(i, j) << " ";
-	//	cout << endl;
-	//}
-	//--------------------------------------
 }
 
 //val不符合要求的值置为0
-void NonMaxSuppression(Mat &val, Mat dir)
+void NonMaxSuppression(Mat dir)
 {
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(val, val, 1, 1, 1, 1, BorderTypes::BORDER_CONSTANT);
@@ -150,18 +138,14 @@ void NonMaxSuppression(Mat &val, Mat dir)
 			}
 		}
 	}
-	//==========debug==========
-	//for (int i = 0; i < row; i++)
-	//{
-	//	for (int j = 0; j < col; j++)
-	//		cout << (int)val.at<uchar>(i, j) << " ";
-	//	cout << endl;
-	//}
-	//========================
 }
 
-void ThresholdDetection(Mat val, Mat &edge)
+void ThresholdDetection(int ,void*)
 {
+	cout << low_threshold << endl;
+
+	dst = val.clone();
+	Mat temp = edge.clone();
 	int row = val.rows;
 	int col = val.cols;
 
@@ -171,11 +155,11 @@ void ThresholdDetection(Mat val, Mat &edge)
 		for (int j = 0; j < col; j++)
 		{
 			if (val.at<uchar>(i, j) >= high_threshold)
-				edge.at<uchar>(i, j) = 2;//一定是边
+				temp.at<uchar>(i, j) = 2;//一定是边
 			else if (val.at<uchar>(i, j) < low_threshold)
-				edge.at<uchar>(i, j) = 0;//一定不是边
+				temp.at<uchar>(i, j) = 0;//一定不是边
 			else 
-				edge.at<uchar>(i, j) = 1;//可能是边的
+				temp.at<uchar>(i, j) = 1;//可能是边的
 		}
 	}	
 	//深度优先遍历，确定所有边
@@ -187,26 +171,26 @@ void ThresholdDetection(Mat val, Mat &edge)
 		{
 			for (int j = 1; j < col - 1; j++)
 			{
-				if (edge.at<uchar>(i, j) == 2)
+				if (temp.at<uchar>(i, j) == 2)
 				{
-					if (edge.at<uchar>(i + 1, j) == 1)
+					if (temp.at<uchar>(i + 1, j) == 1)
 					{
-						edge.at<uchar>(i + 1, j) = 2;
+						temp.at<uchar>(i + 1, j) = 2;
 						changed = true;
 					}
-					if (edge.at<uchar>(i - 1, j) == 1)
+					if (temp.at<uchar>(i - 1, j) == 1)
 					{
-						edge.at<uchar>(i - 1, j) = 2;
+						temp.at<uchar>(i - 1, j) = 2;
 						changed = true;
 					}
-					if (edge.at<uchar>(i, j + 1) == 1)
+					if (temp.at<uchar>(i, j + 1) == 1)
 					{
-						edge.at<uchar>(i, j + 1) = 2;
+						temp.at<uchar>(i, j + 1) = 2;
 						changed = true;
 					}
-					if (edge.at<uchar>(i, j - 1) == 1)
+					if (temp.at<uchar>(i, j - 1) == 1)
 					{
-						edge.at<uchar>(i, j - 1) = 2;
+						temp.at<uchar>(i, j - 1) = 2;
 						changed = true;
 					}
 				}
@@ -214,14 +198,18 @@ void ThresholdDetection(Mat val, Mat &edge)
 		}
 	} while (changed);
 
-	//-------------debug-------------------
-	//for (int i = 0; i < row; i++)
-	//{
-	//	for (int j = 0; j < col; j++)
-	//		cout << (int)edge.at<uchar>(i, j) << " ";
-	//	cout << endl;
-	//}
-	//--------------------------------------
+	//最后确定边缘
+	for (int i = 0; i < row; i++)
+	{
+		for (int j = 0; j < col; j++)
+		{
+			if (temp.at<uchar>(i, j) == 0 || temp.at<uchar>(i, j) == 1)
+				dst.at<uchar>(i, j) = 0;
+			//else
+			//	val.at<uchar>(i, j) = 255;
+		}
+	}
+	imshow("edge_detection", dst);
 }
 
 int main()
@@ -237,43 +225,31 @@ int main()
 		return -1;
 	}
 
-	Mat src_gray, src_low, gradient_val, edge;
+	Mat src_gray, src_low;
 
 	//灰度处理，高斯滤波
 	cvtColor(src, src_gray, COLOR_BGR2GRAY);
 	src_low = GaussianFilter(src_gray);
 
 	//Sobel算子计算梯度
-	gradient_val = src_low.clone();
-	Mat gradient_dir(src_low.rows, src_low.cols, CV_64F);
-	SobelFilter(src_low, gradient_val, gradient_dir);
+	val = src_low.clone();
+	Mat dir(src_low.rows, src_low.cols, CV_64F);
+	SobelFilter(src_low, dir);
 	//namedWindow("sobel", WINDOW_AUTOSIZE);
-	//imshow("sobel", gradient_val);
+	//imshow("sobel", val);
 
 	//非极大值抑制
-	NonMaxSuppression(gradient_val, gradient_dir);
+	NonMaxSuppression(dir);
 	//namedWindow("NMS", WINDOW_AUTOSIZE);
-	//imshow("NMS", gradient_val);
+	//imshow("NMS", val);
 
 	//双阈值检测
-	edge = gradient_val.clone();
-	ThresholdDetection(gradient_val, edge);
+	edge = val.clone();
+	ThresholdDetection(0,0);
 
-	//最后确定边缘
-	int row = gradient_val.rows;
-	int col = gradient_val.cols;
-	for (int i = 0; i < row; i++)
-	{
-		for (int j = 0; j < col; j++)
-		{
-			if (edge.at<uchar>(i, j) == 0 || edge.at<uchar>(i, j) == 1)
-				gradient_val.at<uchar>(i, j) = 0;
-			//else
-			//	gradient_val.at<uchar>(i, j) = 255;
-		}
-	}
 	namedWindow("edge_detection", WINDOW_AUTOSIZE);
-	imshow("edge_detection", gradient_val);
+	//建立滑杆获取低阈值输入
+	createTrackbar("Min Threshold:", "edge_detection", &low_threshold, high_threshold, ThresholdDetection);
 
 	waitKey(0);
 	return 0;
