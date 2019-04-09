@@ -11,9 +11,10 @@ using namespace cv;
 #define k_size 3//卷积核大小
 #define sigma 1//sigma越大，平滑效果越明显
 //双阈值检测
-#define high_threshold 0.3
-#define low_threshold 0.1
+#define high_threshold 100
+#define low_threshold 4
 
+const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
 
 bool Max(uchar x, uchar a, uchar b)
@@ -26,7 +27,6 @@ bool Max(uchar x, uchar a, uchar b)
 
 void GetgaussianKernel()
 {
-	const double PI = 4.0*atan(1.0);//π
 	int center = k_size / 2;
 	double sum = 0;
 
@@ -55,7 +55,7 @@ Mat GaussianFilter(Mat src)
 }
 
 //计算梯度值和梯度方向
-void SobelFilter(Mat src, Mat val, Mat dir)
+void SobelFilter(Mat src, Mat &val, Mat &dir)
 {
 	//Mat sobel_x = (Mat_<uchar>(3, 3) <<
 	//	1, 0, -1,
@@ -70,44 +70,48 @@ void SobelFilter(Mat src, Mat val, Mat dir)
 	//filter2D(src, gy, src.depth(), sobel_y);
 
 	Mat gx, gy;
+	//转换成double
+	src.convertTo(src, CV_64F);
 	Sobel(src, gx, src.depth(), 1, 0, 3);
 	Sobel(src, gy, src.depth(), 0, 1, 3);
-	////=========debug
-	//cout << gx.size() << " " << gx.type()<<endl;
-	//cout << src.size() << " " << src.type()<<endl;
-	//cout << val.size() << " " << val.type();
-	////===========
-	Mat mag(gx.size(), gx.type());
-	//magnitude(gx, gy, mag);//内存异常，可能是类型导致的
-	int temp;
+	gx.convertTo(gx, CV_64F);
+	gy.convertTo(gy, CV_64F);
+
+	magnitude(gx, gy, val);
+	val.convertTo(val, CV_8U);
 	int row = src.rows;
 	int col = src.cols;
+	//int temp;
+	//for (int i = 0; i < row; i++)
+	//{
+	//	for (int j = 0; j < col; j++)
+	//	{
+	//		temp = gx.at<double>(i, j) * gx.at<double>(i, j) + gy.at<double>(i, j) * gy.at<double>(i, j);
+	//		val.at<uchar>(i, j) = sqrt(temp);
+	//	}
+	//}
+
+	//默认返回的是弧度制，换算成角度制
+	//uchar没有负数，错误,结果没有负数
 	for (int i = 0; i < row; i++)
-	{
 		for (int j = 0; j < col; j++)
-		{
-			temp = gx.at<uchar>(i, j) * gx.at<uchar>(i, j) + gy.at<uchar>(i, j) * gy.at<uchar>(i, j);
-			val.at<uchar>(i, j) = sqrt(temp);
-		}
-	}
+			dir.at<double>(i, j) = atan2(gy.at<double>(i, j), gx.at<double>(i, j)) * 180/PI;
+			//dir.at<double>(i, j) = atan2(gx.at<uchar>(i, j), gy.at<uchar>(i, j))* 180/PI;
+
 	//-------------debug-------------------
 	//int r1 = gx.rows;
 	//int c1 = gx.cols;
 	//for (int i = 0; i < r1; i++)
 	//{
 	//	for (int j = 0; j < c1; j++)
-	//			cout << (int)val.at<uchar>(i, j) << " ";
+	//		cout << dir.at<double>(i, j) << " ";
 	//	cout << endl;
 	//}
 	//--------------------------------------
-	for (int i = 0; i < row; i++)
-		for (int j = 0; j < col; j++)
-			dir.at<uchar>(i, j) = atan2(gy.at<uchar>(i, j), gx.at<uchar>(i, j));
-			//dir.at<uchar>(i, j) = atan2(gx.at<uchar>(i, j), gy.at<uchar>(i, j));
 }
 
 //val不符合要求的值置为0
-void NonMaxSuppression(Mat val, Mat dir)
+void NonMaxSuppression(Mat &val, Mat dir)
 {
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(val, val, 1, 1, 1, 1, BorderTypes::BORDER_CONSTANT);
@@ -119,38 +123,45 @@ void NonMaxSuppression(Mat val, Mat dir)
 	{
 		for (int j = 1; j < col - 1; j++)
 		{
-			if ((dir.at<uchar>(i, j) >= -22.5 && dir.at<uchar>(i, j) < 22.5)
-				| (dir.at<uchar>(i, j) >= 157.5 && dir.at<uchar>(i, j) <= 180)
-				| (dir.at<uchar>(i, j) < -157.5))
+			if ((dir.at<double>(i, j) >= -22.5 && dir.at<double>(i, j) < 22.5)
+				| (dir.at<double>(i, j) >= 157.5 && dir.at<double>(i, j) <= 180)
+				| (dir.at<double>(i, j) < -157.5))
 			{
 				if (!Max(val.at<uchar>(i, j), val.at<uchar>(i + 1, j), val.at<uchar>(i - 1, j)))
 					val.at<uchar>(i, j) = 0;
 			}
-			else if ((dir.at<uchar>(i, j) >= 22.5 && dir.at<uchar>(i, j) < 67.5)
-				| (dir.at<uchar>(i, j) >= -157.5 && dir.at<uchar>(i, j) < -112.5))
+			else if ((dir.at<double>(i, j) >= 22.5 && dir.at<double>(i, j) < 67.5)
+				| (dir.at<double>(i, j) >= -157.5 && dir.at<double>(i, j) < -112.5))
 			{
 				if (!Max(val.at<uchar>(i, j), val.at<uchar>(i + 1, j + 1), val.at<uchar>(i - 1, j - 1)))
 					val.at<uchar>(i, j) = 0;
 			}
-			else if ((dir.at<uchar>(i, j) >= 67.5 && dir.at<uchar>(i, j) < 112.5)
-				| (dir.at<uchar>(i, j) >= -112.5 && dir.at<uchar>(i, j) < -67.5))
+			else if ((dir.at<double>(i, j) >= 67.5 && dir.at<double>(i, j) < 112.5)
+				| (dir.at<double>(i, j) >= -112.5 && dir.at<double>(i, j) < -67.5))
 			{
 				if (!Max(val.at<uchar>(i, j), val.at<uchar>(i, j + 1), val.at<uchar>(i, j - 1)))
 					val.at<uchar>(i, j) = 0;
 			}
-			else if ((dir.at<uchar>(i, j) >= 112.5 && dir.at<uchar>(i, j) < 157.5)
-				| (dir.at<uchar>(i, j) >= -67.5 && dir.at<uchar>(i, j) < -22.5))
+			else if ((dir.at<double>(i, j) >= 112.5 && dir.at<double>(i, j) < 157.5)
+				| (dir.at<double>(i, j) >= -67.5 && dir.at<double>(i, j) < -22.5))
 			{
 				if (!Max(val.at<uchar>(i, j), val.at<uchar>(i - 1, j + 1), val.at<uchar>(i + 1, j - 1)))
 					val.at<uchar>(i, j) = 0;
 			}
 		}
 	}
+	//==========debug==========
+	//for (int i = 0; i < row; i++)
+	//{
+	//	for (int j = 0; j < col; j++)
+	//		cout << (int)val.at<uchar>(i, j) << " ";
+	//	cout << endl;
+	//}
+	//========================
 }
 
-void ThresholdDetection(Mat val, Mat edge)
+void ThresholdDetection(Mat &val, Mat &edge)
 {
-	copyMakeBorder(edge, edge, 1, 1, 1, 1, BorderTypes::BORDER_CONSTANT);
 	int row = val.rows;
 	int col = val.cols;
 
@@ -180,6 +191,15 @@ void ThresholdDetection(Mat val, Mat edge)
 				edge.at<uchar>(i, j) = 0;
 		}
 	}
+	//全0！！！！！！！！
+	//-------------debug-------------------
+	//for (int i = 0; i < row; i++)
+	//{
+	//	for (int j = 0; j < col; j++)
+	//		cout << (int)edge.at<uchar>(i, j) << " ";
+	//	cout << endl;
+	//}
+	//--------------------------------------
 }
 
 int main()
@@ -195,24 +215,29 @@ int main()
 		return -1;
 	}
 
-	Mat src_gray, src_low, gradient_val, gradient_dir, edge;
+	Mat src_gray, src_low, gradient_val, edge;
 
 	//灰度处理，高斯滤波
 	cvtColor(src, src_gray, COLOR_BGR2GRAY);
 	src_low = GaussianFilter(src_gray);
 
 	//Sobel算子计算梯度
-	//gradient_val = (src_low.size(), src_low.type());
 	gradient_val = src_low.clone();
-	gradient_dir = src_low.clone();
+	Mat gradient_dir(src_low.rows, src_low.cols, CV_64F);
 	SobelFilter(src_low, gradient_val, gradient_dir);
+	//namedWindow("sobel", WINDOW_AUTOSIZE);
+	//imshow("sobel", gradient_val);
 
 	//非极大值抑制
 	NonMaxSuppression(gradient_val, gradient_dir);
+	//namedWindow("NMS", WINDOW_AUTOSIZE);
+	//imshow("NMS", gradient_val);
 
 	//双阈值检测
 	edge = gradient_val.clone();
 	ThresholdDetection(gradient_val, edge);
+	namedWindow("Threshold", WINDOW_AUTOSIZE);
+	imshow("Threshold", gradient_val);
 
 	//最后确定边缘
 	int row = gradient_val.rows;
@@ -223,6 +248,8 @@ int main()
 		{
 			if (edge.at<uchar>(i, j) == 0)
 				gradient_val.at<uchar>(i, j) = 0;
+			//else
+			//	gradient_val.at<uchar>(i, j) = 255;
 		}
 	}
 	namedWindow("edge_detection", WINDOW_AUTOSIZE);
