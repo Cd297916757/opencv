@@ -3,6 +3,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 #include "math.h"
+#include <queue>
 
 using namespace std;
 using namespace cv;
@@ -12,11 +13,26 @@ using namespace cv;
 #define high_threshold 100
 //#define low_threshold 40
 
+class node {
+public:
+	int x;
+	int y;
+	node(int x, int y) {
+		this->x = x;
+		this->y = y;
+	}
+	node()
+	{
+		this->x = 0;
+		this->y = 0;
+	}
+};
+
 int low_threshold = 0;
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
 
-Mat val, edge, dst;
+Mat val, edge, dst, area;
 
 bool Max(uchar x, uchar a, uchar b)
 {
@@ -95,7 +111,7 @@ void SobelFilter(Mat src, Mat &dir)
 	//默认返回的是弧度制，换算成角度制
 	for (int i = 0; i < row; i++)
 		for (int j = 0; j < col; j++)
-			dir.at<double>(i, j) = atan2(gy.at<double>(i, j), gx.at<double>(i, j)) * 180/PI;
+			dir.at<double>(i, j) = atan2(gy.at<double>(i, j), gx.at<double>(i, j)) * 180 / PI;
 }
 
 //val不符合要求的值置为0
@@ -140,12 +156,10 @@ void NonMaxSuppression(Mat dir)
 	}
 }
 
-void ThresholdDetection(int ,void*)
+void ThresholdDetection(int, void*)
 {
-	cout << low_threshold << endl;
-
 	dst = val.clone();
-	Mat temp = edge.clone();
+	area = edge.clone();
 	int row = val.rows;
 	int col = val.cols;
 
@@ -155,58 +169,115 @@ void ThresholdDetection(int ,void*)
 		for (int j = 0; j < col; j++)
 		{
 			if (val.at<uchar>(i, j) >= high_threshold)
-				temp.at<uchar>(i, j) = 2;//一定是边
+				area.at<uchar>(i, j) = 2;//一定是边
 			else if (val.at<uchar>(i, j) < low_threshold)
-				temp.at<uchar>(i, j) = 0;//一定不是边
-			else 
-				temp.at<uchar>(i, j) = 1;//可能是边的
+				area.at<uchar>(i, j) = 0;//一定不是边
+			else
+				area.at<uchar>(i, j) = 1;//可能是边的
 		}
-	}	
-	//深度优先遍历，确定所有边
-	bool changed;
-	do
+	}
+
+	////确定所有边
+	//bool changed;
+	//do
+	//{
+	//	changed = false;
+	//	for (int i = 1; i < row - 1; i++)
+	//	{
+	//		for (int j = 1; j < col - 1; j++)
+	//		{
+	//			if (area.at<uchar>(i, j) == 2)
+	//			{
+	//				if (area.at<uchar>(i + 1, j) == 1)
+	//				{
+	//					area.at<uchar>(i + 1, j) = 2;
+	//					changed = true;
+	//				}
+	//				if (area.at<uchar>(i - 1, j) == 1)
+	//				{
+	//					area.at<uchar>(i - 1, j) = 2;
+	//					changed = true;
+	//				}
+	//				if (area.at<uchar>(i, j + 1) == 1)
+	//				{
+	//					area.at<uchar>(i, j + 1) = 2;
+	//					changed = true;
+	//				}
+	//				if (area.at<uchar>(i, j - 1) == 1)
+	//				{
+	//					area.at<uchar>(i, j - 1) = 2;
+	//					changed = true;
+	//				}
+	//			}
+	//		}
+	//	}
+	//} while (changed);
+
+	queue<node> q;
+	//避免重复进入队列,做标记
+	Mat in(row, col, CV_8U, Scalar::all(0));
+	node current;
+	for (int i = 0; i < row; i++)
 	{
-		changed = false;
-		for (int i = 1; i < row - 1; i++)
+		for (int j = 0; j < col; j++)
 		{
-			for (int j = 1; j < col - 1; j++)
+			if (area.at<uchar>(i, j) == 2)
 			{
-				if (temp.at<uchar>(i, j) == 2)
-				{
-					if (temp.at<uchar>(i + 1, j) == 1)
-					{
-						temp.at<uchar>(i + 1, j) = 2;
-						changed = true;
-					}
-					if (temp.at<uchar>(i - 1, j) == 1)
-					{
-						temp.at<uchar>(i - 1, j) = 2;
-						changed = true;
-					}
-					if (temp.at<uchar>(i, j + 1) == 1)
-					{
-						temp.at<uchar>(i, j + 1) = 2;
-						changed = true;
-					}
-					if (temp.at<uchar>(i, j - 1) == 1)
-					{
-						temp.at<uchar>(i, j - 1) = 2;
-						changed = true;
-					}
-				}
+				current = node(i, j);
+				break;
 			}
 		}
-	} while (changed);
+	}
+	int x, y;
+	q.push(current);
+	while (!q.empty())
+	{
+		current = (q.front());
+		x = current.x;
+		y = current.y;
+		area.at<uchar>(x, y) = 2;
+		if (x - 1 >= 0)
+		{
+			if (area.at<uchar>(x - 1, y) == 1 && in.at<uchar>(x - 1, y) == 0)
+			{
+				q.push(node(x - 1, y));
+				in.at<uchar>(x - 1, y) = 1;
+			}
+		}
+		if (x + 1 < row)
+		{
+			if (area.at<uchar>(x + 1, y) == 1 && in.at<uchar>(x + 1, y) == 0)
+			{
+				q.push(node(x + 1, y));
+				in.at<uchar>(x + 1, y) = 1;
+			}
+		}
+		if (y - 1 >= 0)
+		{
+			if (area.at<uchar>(x, y - 1) == 1 && in.at<uchar>(x, y - 1) == 0)
+			{
+				q.push(node(x, y - 1));
+				in.at<uchar>(x, y - 1) = 1;
+			}
+		}
+		if (y + 1 < col)
+		{
+			if (area.at<uchar>(x, y + 1) == 1 && in.at<uchar>(x, y + 1) == 0)
+			{
+				q.push(node(x, y + 1));
+				in.at<uchar>(x, y + 1) = 1;
+			}
+		}
+		q.pop();
+	}
 
 	//最后确定边缘
 	for (int i = 0; i < row; i++)
 	{
 		for (int j = 0; j < col; j++)
 		{
-			if (temp.at<uchar>(i, j) == 0 || temp.at<uchar>(i, j) == 1)
+			if (area.at<uchar>(i, j) == 0 || area.at<uchar>(i, j) == 1)
 				dst.at<uchar>(i, j) = 0;
-			//else
-			//	val.at<uchar>(i, j) = 255;
 		}
 	}
 	imshow("edge_detection", dst);
@@ -217,10 +288,10 @@ int main()
 	Mat src = imread("dog.bmp");
 	//判断图像是否加载成功
 	if (src.data)
-		cout << "图像加载成功!" << endl << endl;
+		cout << "图像加载成功!" << endl;
 	else
 	{
-		cout << "图像加载失败!" << endl << endl;
+		cout << "图像加载失败!" << endl;
 		system("pause");
 		return -1;
 	}
@@ -245,7 +316,7 @@ int main()
 
 	//双阈值检测
 	edge = val.clone();
-	ThresholdDetection(0,0);
+	ThresholdDetection(0, 0);
 
 	namedWindow("edge_detection", WINDOW_AUTOSIZE);
 	//建立滑杆获取低阈值输入
