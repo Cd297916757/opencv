@@ -12,7 +12,7 @@ using namespace cv;
 #define sigma 1//sigma越大，平滑效果越明显
 //双阈值检测
 #define high_threshold 100
-#define low_threshold 4
+#define low_threshold 40
 
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
@@ -160,38 +160,60 @@ void NonMaxSuppression(Mat &val, Mat dir)
 	//========================
 }
 
-void ThresholdDetection(Mat &val, Mat &edge)
+void ThresholdDetection(Mat val, Mat &edge)
 {
 	int row = val.rows;
 	int col = val.cols;
 
 	//确定一定是边的
-	for (int i = 1; i < row - 1; i++)
-	{
-		for (int j = 1; j < col - 1; j++)
-		{
-			if (val.at<uchar>(i, j) >= high_threshold)
-				edge.at<uchar>(i, j) = 2;//一定是边
-			else if (val.at<uchar>(i, j) >= low_threshold)
-				edge.at<uchar>(i, j) = 1;//可能是边
-			else
-				edge.at<uchar>(i, j) = 0;//一定不是边
-		}
-	}
-	//二次遍历，确定所有边
 	for (int i = 0; i < row; i++)
 	{
 		for (int j = 0; j < col; j++)
 		{
-			if ((edge.at<uchar>(i, j) == 1) &&
-				((edge.at<uchar>(i + 1, j) == 2) | (edge.at<uchar>(i - 1, j) == 2)
-					| (edge.at<uchar>(i, j + 1) == 2) | (edge.at<uchar>(i, j - 1) == 2)))
-				edge.at<uchar>(i, j) = 1;
-			else
-				edge.at<uchar>(i, j) = 0;
+			if (val.at<uchar>(i, j) >= high_threshold)
+				edge.at<uchar>(i, j) = 2;//一定是边
+			else if (val.at<uchar>(i, j) < low_threshold)
+				edge.at<uchar>(i, j) = 0;//一定不是边
+			else 
+				edge.at<uchar>(i, j) = 1;//可能是边的
 		}
-	}
-	//全0！！！！！！！！
+	}	
+	//深度优先遍历，确定所有边
+	bool changed;
+	do
+	{
+		changed = false;
+		for (int i = 1; i < row - 1; i++)
+		{
+			for (int j = 1; j < col - 1; j++)
+			{
+				if (edge.at<uchar>(i, j) == 2)
+				{
+					if (edge.at<uchar>(i + 1, j) == 1)
+					{
+						edge.at<uchar>(i + 1, j) = 2;
+						changed = true;
+					}
+					if (edge.at<uchar>(i - 1, j) == 1)
+					{
+						edge.at<uchar>(i - 1, j) = 2;
+						changed = true;
+					}
+					if (edge.at<uchar>(i, j + 1) == 1)
+					{
+						edge.at<uchar>(i, j + 1) = 2;
+						changed = true;
+					}
+					if (edge.at<uchar>(i, j - 1) == 1)
+					{
+						edge.at<uchar>(i, j - 1) = 2;
+						changed = true;
+					}
+				}
+			}
+		}
+	} while (changed);
+
 	//-------------debug-------------------
 	//for (int i = 0; i < row; i++)
 	//{
@@ -236,8 +258,6 @@ int main()
 	//双阈值检测
 	edge = gradient_val.clone();
 	ThresholdDetection(gradient_val, edge);
-	namedWindow("Threshold", WINDOW_AUTOSIZE);
-	imshow("Threshold", gradient_val);
 
 	//最后确定边缘
 	int row = gradient_val.rows;
@@ -246,7 +266,7 @@ int main()
 	{
 		for (int j = 0; j < col; j++)
 		{
-			if (edge.at<uchar>(i, j) == 0)
+			if (edge.at<uchar>(i, j) == 0 || edge.at<uchar>(i, j) == 1)
 				gradient_val.at<uchar>(i, j) = 0;
 			//else
 			//	gradient_val.at<uchar>(i, j) = 255;
