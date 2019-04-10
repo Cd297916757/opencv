@@ -157,6 +157,87 @@ void NonMaxSuppression(Mat dir)
 	}
 }
 
+void bfs(Mat &in, node current)
+{
+	queue<node> q;
+	int x, y;
+	int row = in.rows;
+	int col = in.cols;
+	q.push(current);
+	while (!q.empty())
+	{
+		current = (q.front());
+		x = current.x;
+		y = current.y;
+		area.at<uchar>(x, y) = 2;
+		if (x - 1 >= 0)
+		{
+			if (area.at<uchar>(x - 1, y) == 1 && in.at<uchar>(x - 1, y) == 0)
+			{
+				q.push(node(x - 1, y));
+				in.at<uchar>(x - 1, y) = 1;
+			}
+		}
+		if (x + 1 < row)
+		{
+			if (area.at<uchar>(x + 1, y) == 1 && in.at<uchar>(x + 1, y) == 0)
+			{
+				q.push(node(x + 1, y));
+				in.at<uchar>(x + 1, y) = 1;
+			}
+		}
+		if (y - 1 >= 0)
+		{
+			if (area.at<uchar>(x, y - 1) == 1 && in.at<uchar>(x, y - 1) == 0)
+			{
+				q.push(node(x, y - 1));
+				in.at<uchar>(x, y - 1) = 1;
+			}
+		}
+		if (y + 1 < col)
+		{
+			if (area.at<uchar>(x, y + 1) == 1 && in.at<uchar>(x, y + 1) == 0)
+			{
+				q.push(node(x, y + 1));
+				in.at<uchar>(x, y + 1) = 1;
+			}
+		}
+		if (x + 1 < row &&y + 1 < col)
+		{
+			if (area.at<uchar>(x + 1, y + 1) == 1 && in.at<uchar>(x + 1, y + 1) == 0)
+			{
+				q.push(node(x + 1, y + 1));
+				in.at<uchar>(x + 1, y + 1) = 1;
+			}
+		}
+		if (x - 1 >= 0 && y + 1 < col)
+		{
+			if (area.at<uchar>(x - 1, y + 1) == 1 && in.at<uchar>(x - 1, y + 1) == 0)
+			{
+				q.push(node(x - 1, y + 1));
+				in.at<uchar>(x - 1, y + 1) = 1;
+			}
+		}
+		if (x - 1 >= 0 && y - 1 >= 0)
+		{
+			if (area.at<uchar>(x - 1, y - 1) == 1 && in.at<uchar>(x - 1, y - 1) == 0)
+			{
+				q.push(node(x - 1, y - 1));
+				in.at<uchar>(x - 1, y - 1) = 1;
+			}
+		}
+		if (x + 1 < row && y + 1 < col)
+		{
+			if (area.at<uchar>(x + 1, y + 1) == 1 && in.at<uchar>(x + 1, y + 1) == 0)
+			{
+				q.push(node(x + 1, y + 1));
+				in.at<uchar>(x - 1, y + 1) = 1;
+			}
+		}
+		q.pop();
+	}
+}
+
 void ThresholdDetection(int, void*)
 {
 	high_threshold = low_threshold * 3;
@@ -215,7 +296,6 @@ void ThresholdDetection(int, void*)
 	//	}
 	//} while (changed);
 
-	queue<node> q;
 	//避免重复进入队列,做标记
 	Mat in(row, col, CV_8U, Scalar::all(0));
 	node current;
@@ -223,54 +303,12 @@ void ThresholdDetection(int, void*)
 	{
 		for (int j = 0; j < col; j++)
 		{
-			if (area.at<uchar>(i, j) == 2)
+			if (area.at<uchar>(i, j) == 2 && in.at<uchar>(i, j) == 0)
 			{
 				current = node(i, j);
-				break;
+				bfs(in, current);
 			}
 		}
-	}
-	int x, y;
-	q.push(current);
-	while (!q.empty())
-	{
-		current = (q.front());
-		x = current.x;
-		y = current.y;
-		area.at<uchar>(x, y) = 2;
-		if (x - 1 >= 0)
-		{
-			if (area.at<uchar>(x - 1, y) == 1 && in.at<uchar>(x - 1, y) == 0)
-			{
-				q.push(node(x - 1, y));
-				in.at<uchar>(x - 1, y) = 1;
-			}
-		}
-		if (x + 1 < row)
-		{
-			if (area.at<uchar>(x + 1, y) == 1 && in.at<uchar>(x + 1, y) == 0)
-			{
-				q.push(node(x + 1, y));
-				in.at<uchar>(x + 1, y) = 1;
-			}
-		}
-		if (y - 1 >= 0)
-		{
-			if (area.at<uchar>(x, y - 1) == 1 && in.at<uchar>(x, y - 1) == 0)
-			{
-				q.push(node(x, y - 1));
-				in.at<uchar>(x, y - 1) = 1;
-			}
-		}
-		if (y + 1 < col)
-		{
-			if (area.at<uchar>(x, y + 1) == 1 && in.at<uchar>(x, y + 1) == 0)
-			{
-				q.push(node(x, y + 1));
-				in.at<uchar>(x, y + 1) = 1;
-			}
-		}
-		q.pop();
 	}
 
 	//最后确定边缘
