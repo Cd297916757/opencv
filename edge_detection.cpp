@@ -10,8 +10,6 @@ using namespace cv;
 
 #define k_size 3//卷积核大小
 #define sigma 1//sigma越大，平滑效果越明显
-//#define high_threshold 100
-//#define low_threshold 40
 
 class node {
 public:
@@ -75,18 +73,6 @@ Mat GaussianFilter(Mat src)
 //计算梯度值和梯度方向
 void SobelFilter(Mat src, Mat &dir)
 {
-	//Mat sobel_x = (Mat_<uchar>(3, 3) <<
-	//	1, 0, -1,
-	//	2, 0, -2,
-	//	1, 0, -1);
-	//Mat sobel_y = (Mat_<uchar>(3, 3) <<
-	//	1, 2, 1,
-	//	0, 0, 0,
-	//	1, -2, -1);
-	//Mat gx, gy;
-	//filter2D(src, gx, src.depth(), sobel_x);
-	//filter2D(src, gy, src.depth(), sobel_y);
-
 	Mat gx, gy;
 	//转换成double
 	src.convertTo(src, CV_64F);
@@ -99,15 +85,6 @@ void SobelFilter(Mat src, Mat &dir)
 	val.convertTo(val, CV_8U);
 	int row = src.rows;
 	int col = src.cols;
-	//int temp;
-	//for (int i = 0; i < row; i++)
-	//{
-	//	for (int j = 0; j < col; j++)
-	//	{
-	//		temp = gx.at<double>(i, j) * gx.at<double>(i, j) + gy.at<double>(i, j) * gy.at<double>(i, j);
-	//		val.at<uchar>(i, j) = sqrt(temp);
-	//	}
-	//}
 
 	//默认返回的是弧度制，换算成角度制
 	for (int i = 0; i < row; i++)
@@ -259,42 +236,6 @@ void ThresholdDetection(int, void*)
 				area.at<uchar>(i, j) = 1;//可能是边的
 		}
 	}
-
-	////确定所有边
-	//bool changed;
-	//do
-	//{
-	//	changed = false;
-	//	for (int i = 1; i < row - 1; i++)
-	//	{
-	//		for (int j = 1; j < col - 1; j++)
-	//		{
-	//			if (area.at<uchar>(i, j) == 2)
-	//			{
-	//				if (area.at<uchar>(i + 1, j) == 1)
-	//				{
-	//					area.at<uchar>(i + 1, j) = 2;
-	//					changed = true;
-	//				}
-	//				if (area.at<uchar>(i - 1, j) == 1)
-	//				{
-	//					area.at<uchar>(i - 1, j) = 2;
-	//					changed = true;
-	//				}
-	//				if (area.at<uchar>(i, j + 1) == 1)
-	//				{
-	//					area.at<uchar>(i, j + 1) = 2;
-	//					changed = true;
-	//				}
-	//				if (area.at<uchar>(i, j - 1) == 1)
-	//				{
-	//					area.at<uchar>(i, j - 1) = 2;
-	//					changed = true;
-	//				}
-	//			}
-	//		}
-	//	}
-	//} while (changed);
 
 	//避免重复进入队列,做标记
 	Mat in(row, col, CV_8U, Scalar::all(0));

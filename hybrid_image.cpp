@@ -46,9 +46,6 @@ Mat conv(Mat src, Mat kern)
 	int col1 = src.cols;
 	int row2 = kern.rows;
 	int col2 = kern.cols;
-
-	//int border1 = (row2 - 1)/2;
-	//int border2 = (col2 - 1)/2;
 	//原图片扩展0
 	copyMakeBorder(src, src, col2, col2, row2, row2, BorderTypes::BORDER_DEFAULT);//BORDER_REPLICATE
 
@@ -122,33 +119,22 @@ int main()
 
 	GetgaussianKernel();//生成高斯卷积核矩阵
 	Mat gaus_kern = Mat(size, size, CV_64F, gaus);
-	//Mat lap_kern = (Mat_<double>(3, 3) <<
-	//	1, 1, 1,
-	//	1, -8, 1,
-	//	1, 1, 1);
 	Mat dst_low, dst_high, dst;
 
 	filter2D(src_image1, dst_low, src_image1.depth(), gaus_kern);
-	//dst_low = conv(src_image1, gaus_kern);
 	namedWindow("low_pass", WINDOW_AUTOSIZE);
 	imshow("low_pass", dst_low);
 
-	//Mat A33(3, 3, CV_32F, Scalar(5));
-
 	Mat dst_temp;
-	//filter2D(src_image2, dst_high, src_image2.depth(), lap_kern);
-	//dst_high = conv(src_image2, lap_kern);
 	filter2D(src_image2, dst_temp, src_image2.depth(), gaus_kern);
 
 	src_image2 += Scalar::all(12);
 
-	//dst_temp = conv(src_image2, gaus_kern);
 	addWeighted(src_image2, 1, dst_temp, -1, 0, dst_high);
 	namedWindow("high_pass", WINDOW_AUTOSIZE);
 	imshow("high_pass", dst_high);
 
 	namedWindow("hybrid_image", WINDOW_AUTOSIZE);
-	//addWeighted(dst_low, 1, dst_high, 1, 0, dst);
 	dst = add(dst_low, dst_high, 0.6);
 	imshow("hybrid_image", dst);
 
