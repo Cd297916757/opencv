@@ -1,69 +1,86 @@
-#include <iostream>
-#include <opencv2/core/core.hpp>
-#include <opencv2/features2d/features2d.hpp>
-#include <opencv2/highgui/highgui.hpp>
+﻿#include <iostream>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 using namespace std;
 using namespace cv;
 
+int compare(uchar a, uchar b)
+{
+	if (a > b)
+		return 1;
+	else
+		return 0;
+}
+
+//Features from  Accelerated Segment Test
+void FAST(Mat &src,Mat &flag)
+{
+	//flag默认全1，确定不是角点的置为0
+
+	//原图片扩展0，否则后面循环矩阵越界
+	copyMakeBorder(src, src, 3, 3, 3, 3, BorderTypes::BORDER_CONSTANT);//可能最后一个参数需要考虑一下
+	int row = src.rows;
+	int col = src.cols;
+
+	uchar test[16];
+	int result[16];
+	int sum = 0;
+	
+	for (int i = 0; i < row; i++)
+	{
+		for (int j = 0; j < col; j++)
+		{	
+			//先检测1,5,9,13位置的像素点
+			test[0] = src.at<uchar>(i, j - 3);
+			test[4] = src.at<uchar>(i + 3, j);
+			test[8] = src.at<uchar>(i, j + 3);
+			test[12] = src.at<uchar>(i - 3, j);
+			result[0] = compare(src.at<uchar>(i, j), test[0]);
+			result[1] = compare(src.at<uchar>(i, j), test[4]);
+			result[2] = compare(src.at<uchar>(i, j), test[8]);
+			result[3] = compare(src.at<uchar>(i, j), test[12]);
+
+			//判断是否是角点
+			sum = result[0] + result[1] + result[2] + result[3];
+			if (sum == 2)
+				flag.at<uchar>(i, j) = 0;
+			else//进一步判断是否连续n个角点的灰度值都大于或小于当前点
+			{
+				test[1] = src.at<uchar>(i + 1, j - 3);
+				test[2] = src.at<uchar>(i + 2, j - 2);
+				test[3] = src.at<uchar>(i + 3, j - 1);
+				test[5] = src.at<uchar>(i + 3, j + 1);
+				test[6] = src.at<uchar>(i + 2, j + 2);
+				test[7] = src.at<uchar>(i + 1, j + 3);
+				test[9] = src.at<uchar>(i - 1, j + 3);
+				test[10] = src.at<uchar>(i - 2, j + 2);
+				test[11] = src.at<uchar>(i - 3, j + 1);
+				test[13] = src.at<uchar>(i - 3, j - 1);
+				test[14] = src.at<uchar>(i - 2, j - 2);
+				test[15] = src.at<uchar>(i - 1, j - 3);
+				for(int k = 0;k < 15;k++)
+					result[k] = compare(src.at<uchar>(i, j), test[k]);
+			}
+		}
+	}
+}
+
 int main()
 {
-	//-- 读取图像
-	Mat img_1 = imread("1.jpg");
-	Mat img_2 = imread("2.jpg");
-
-	//-- 初始化
-	vector<KeyPoint> keypoints_1, keypoints_2;
-	Mat descriptors_1, descriptors_2;
-	Ptr<FeatureDetector> detector = ORB::create();
-	Ptr<DescriptorExtractor> descriptor = ORB::create();
-
-	Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("BruteForce-Hamming");
-
-	//-- 第一步:检测 Oriented FAST 角点位置
-	detector->detect(img_1, keypoints_1);
-	detector->detect(img_2, keypoints_2);
-
-	//-- 第二步:根据角点位置计算 BRIEF 描述子
-	descriptor->compute(img_1, keypoints_1, descriptors_1);
-	descriptor->compute(img_2, keypoints_2, descriptors_2);
-
-	Mat outimg1;
-	drawKeypoints(img_1, keypoints_1, outimg1, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
-	imshow("ORB特征点", outimg1);
-
-	//-- 第三步:对两幅图像中的BRIEF描述子进行匹配，使用 Hamming 距离
-	vector<DMatch> matches;
-	matcher->match(descriptors_1, descriptors_2, matches);
-
-	//-- 第四步:匹配点对筛选
-	double min_dist = 10000, max_dist = 0;
-
-	//找出所有匹配之间的最小距离和最大距离, 即是最相似的和最不相似的两组点之间的距离
-	for (int i = 0; i < descriptors_1.rows; i++)
+	Mat src1 = imread("1.jpg");
+	Mat src2 = imread("2.jpg");
+	//判断图像是否加载成功
+	if (src1.data && src2.data)
+		cout << "图像加载成功!" << endl;
+	else
 	{
-		double dist = matches[i].distance;
-		if (dist < min_dist) min_dist = dist;
-		if (dist > max_dist) max_dist = dist;
+		cout << "图像加载失败!" << endl;
+		system("pause");
+		return -1;
 	}
 
-	printf("-- Max dist : %f \n", max_dist);
-	printf("-- Min dist : %f \n", min_dist);
-
-	//当描述子之间的距离大于两倍的最小距离时,即认为匹配有误.但有时候最小距离会非常小,设置一个经验值30作为下限.
-	vector< DMatch > good_matches;
-	for (int i = 0; i < descriptors_1.rows; i++)
-		if (matches[i].distance <= max(2 * min_dist, 30.0))
-			good_matches.push_back(matches[i]);
-
-	//-- 第五步:绘制匹配结果
-	Mat img_match;
-	Mat img_goodmatch;
-	drawMatches(img_1, keypoints_1, img_2, keypoints_2, matches, img_match);
-	drawMatches(img_1, keypoints_1, img_2, keypoints_2, good_matches, img_goodmatch);
-	imshow("所有匹配点对", img_match);
-	imshow("优化后匹配点对", img_goodmatch);
-	waitKey(0);
 
 	return 0;
 }
