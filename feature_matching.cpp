@@ -1,15 +1,17 @@
 ﻿#include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/features2d/features2d.hpp>
 #include <opencv2/imgproc.hpp>
 #include <random>
+#include <vector>
 
 using namespace std;
 using namespace cv;
 
 #define k_size 3//卷积核大小
 #define sigma 1//sigma越大，平滑效果越明显
-#define threshold 15//FAST的阈值
+#define threshold 30//FAST的阈值
 //=====BRIEF描述子部分=====
 #define s 10//半径
 #define Time 10//随机选取的点对
@@ -66,27 +68,28 @@ int compare(uchar a, uchar b)
 {
 	if (a + threshold < b)
 		return 1;
-	else if (a - threshold >b)
+	else if (a - threshold > b)
 		return 1;
 	else
 		return 0;
 }
 
 //Features from  Accelerated Segment Test
-void FAST(Mat src,Mat &area)
+void FAST(Mat src, Mat &area)
 {
 	int row = src.rows;
 	int col = src.cols;
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(src, src, 3, 3, 3, 3, BorderTypes::BORDER_CONSTANT);//可能最后一个参数需要考虑一下
-	 
+
 	int test[16];
 	int result[16];
+	KeyPoint my_keypoint;
 
 	for (int i = 3; i < row + 3; i++)
 	{
 		for (int j = 3; j < col + 3; j++)
-		{	
+		{
 			int sum = 0;
 			//先检测1,5,9,13位置的像素点
 			test[0] = src.at<uchar>(i, j - 3);
@@ -116,7 +119,7 @@ void FAST(Mat src,Mat &area)
 				test[13] = src.at<uchar>(i - 3, j - 1);
 				test[14] = src.at<uchar>(i - 2, j - 2);
 				test[15] = src.at<uchar>(i - 1, j - 3);
-				for(int k = 0;k < 16;k++)
+				for (int k = 0; k < 16; k++)
 					result[k] = compare(src.at<uchar>(i, j), test[k]);
 
 				//进一步判断是否连续12个角点的灰度值都大于当前点加阈值或小于当前点减阈值
@@ -154,19 +157,19 @@ double GaussRand()
 	random_device rd;
 	mt19937 gen(rd());
 	//normal(0,1)中0为均值，1为方差
-	normal_distribution<double> normal(0, s*s/25);
+	normal_distribution<double> normal(0, s*s / 25);
 	return round(normal(gen));
 }
 
 //p和q都符合(0,s*s/25)的高斯分布 特征点周围sxs的区域
-void BRIEF(Mat src,int desc[Time])
+void BRIEF(Mat src, int desc[Time])
 {
 	//生成符合高斯分布的随机坐标
 	node p[Time], q[Time];
 	for (int i = 0; i < Time; i++)
 	{
 		p[i].x = GaussRand();
-		p[i].y = GaussRand();	
+		p[i].y = GaussRand();
 	}
 	for (int i = 0; i < Time; i++)
 	{
@@ -216,36 +219,48 @@ int main()
 	Mat src1_fast = src1.clone();
 	Mat src2_fast = src2.clone();
 	int num1 = 0, num2 = 0;
+
+	//使用vector存储keypoint
+	vector <KeyPoint> keypoint_vector;
+	KeyPoint my_keypoint;
 	for (int i = 0; i < src1_fast.rows; i++)
 	{
 		for (int j = 0; j < src1_fast.cols; j++)
 		{
 			if (area1.at<uchar>(i, j) == 255)
 			{
-				src1_fast.at<Vec3b>(i, j) = 0;
-				src1_fast.at<Vec3b>(i, j)[2] = 255;
+				//src1_fast.at<Vec3b>(i, j) = 0;
+				//src1_fast.at<Vec3b>(i, j)[2] = 255;
+				//my_keypoint = KeyPoint(i, j, 1);
+				my_keypoint = KeyPoint(j, i, 0.01);//？
+				keypoint_vector.push_back(my_keypoint);
 				num1++;
 			}
 		}
 	}
+	drawKeypoints(src1, keypoint_vector, src1_fast, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
+
+	keypoint_vector.clear();
 	for (int i = 0; i < src2_fast.rows; i++)
 	{
 		for (int j = 0; j < src2_fast.cols; j++)
 		{
 			if (area2.at<uchar>(i, j) == 255)
 			{
-				src2_fast.at<Vec3b>(i, j) = 0;
-				src2_fast.at<Vec3b>(i, j)[2] = 255;
+				//src2_fast.at<Vec3b>(i, j) = 0;
+				//src2_fast.at<Vec3b>(i, j)[2] = 255;
+				my_keypoint = KeyPoint(j, i, 1);
+				keypoint_vector.push_back(my_keypoint);
 				num2++;
 			}
 		}
 	}
+	drawKeypoints(src2, keypoint_vector, src2_fast, Scalar::all(-1), DrawMatchesFlags::DEFAULT);
 	imshow("src1特征点", src1_fast);
 	imshow("src2特征点", src2_fast);
 
+
 	//存储描述子的二进制码，Descriptor
-	//int desc1[Time];
-	//int desc2[Time];
 	int **desc1 = new int *[num1];
 	int **desc2 = new int *[num2];
 	for (int i = 0; i < num1; i++)
@@ -273,6 +288,8 @@ int main()
 			}
 		}
 	}
+
+
 	//Mat dst1 = src1.clone();
 	//Mat dst2 = src2.clone();
 	//imshow("dst1", dst1);
