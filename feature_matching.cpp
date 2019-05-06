@@ -24,7 +24,7 @@ class point {
 public:
 	int x;
 	int y;
-	point(int x, int y) 
+	point(int x, int y)
 	{
 		this->x = x;
 		this->y = y;
@@ -183,7 +183,7 @@ double GaussRand()
 }
 
 //p和q都符合(0,s*s/25)的高斯分布 特征点周围sxs的区域
-void BRIEF(Mat src,descriptor desc)
+void BRIEF(Mat src, descriptor &desc)
 {
 	//生成符合高斯分布的随机坐标
 	point p[Time], q[Time];
@@ -213,8 +213,8 @@ void BRIEF(Mat src,descriptor desc)
 		/*在最早的eccv2010的文章中，BRIEF使用的是pixel跟pixel的大小来构造描述子的每一个bit。
 		这样的后果就是对噪声敏感。因此，在ORB的方案中，做了这样的改进，不再使用pixel-pair，而是使用9×9的patch-pair。
 		也就是说，对比patch的像素值之和。（可以通过积分图快速计算）。*/
-		if (src.at<uchar>(s + desc.p.x + p[i].x,s + desc.p.y + p[i].y) > 
-			src.at<uchar>(s + desc.p.x + q[i].x,s + desc.p.y + q[i].y))
+		if (src.at<uchar>(s + desc.p.x + p[i].x, s + desc.p.y + p[i].y) >
+			src.at<uchar>(s + desc.p.x + q[i].x, s + desc.p.y + q[i].y))
 			desc.number[i] = 1;
 		else
 			desc.number[i] = 0;
@@ -222,7 +222,7 @@ void BRIEF(Mat src,descriptor desc)
 }
 
 //生成特征描述子
-void GetBRIFE(Mat src,Mat area,descriptor desc[Max])
+void GetBRIFE(Mat src, Mat area, descriptor desc[Max])
 {
 	int temp = 0;
 	for (int i = 0; i < area.rows; i++)
@@ -241,9 +241,10 @@ void GetBRIFE(Mat src,Mat area,descriptor desc[Max])
 }
 
 //比较描述子的二进制码
-void CmpDescriptor(Mat src,descriptor desc1[Max],descriptor desc2[Max],int num1,int num2,int offset)
+void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int num1, int num2, int offset, Mat area1, Mat area2)
 {
 	Point p0, p1;
+	bool flag = true;
 	for (int i = 0; i < num1; i++)
 	{
 		for (int j = 0; j < num2; j++)
@@ -252,14 +253,13 @@ void CmpDescriptor(Mat src,descriptor desc1[Max],descriptor desc2[Max],int num1,
 			{
 				if (desc1[i].number[k] != desc2[j].number[k])
 					break;
-				//匹配后如何存储结果，方便绘画点对
 				if ((desc1[i].number[k] == desc2[j].number[k]) && (k == Time - 1))//match
 				{
-					p0.x = desc1[i].p.x;
-					p0.y = desc1[i].p.y;
-					p1.x = desc2[i].p.x + offset;
-					p1.y = desc2[i].p.y;
-					line(src,p0,p1, Scalar(0, 0, 255));
+					p0.y = desc1[i].p.x;
+					p0.x = desc1[i].p.y;
+					p1.y = desc2[i].p.x;// +offset;
+					p1.x = desc2[i].p.y + offset;
+					line(src, p0, p1, Scalar(0, 0, 255));
 				}
 			}
 		}
@@ -300,7 +300,7 @@ int main()
 	Mat src2_fast = src2.clone();
 	int num1 = 0, num2 = 0;//特征点的数量
 	//使用vector存储keypoint
-	vector <KeyPoint> keypoint_vector1,keypoint_vector2;
+	vector <KeyPoint> keypoint_vector1, keypoint_vector2;
 	KeyPoint my_keypoint;
 
 	for (int i = 0; i < src1_fast.rows; i++)
@@ -311,7 +311,7 @@ int main()
 			{
 				//src1_fast.at<Vec3b>(i, j) = 0;
 				//src1_fast.at<Vec3b>(i, j)[2] = 255;
-				my_keypoint = KeyPoint(j, i, 1);//？(i,j)
+				my_keypoint = KeyPoint(j, i, 1);
 				keypoint_vector1.push_back(my_keypoint);
 				num1++;
 			}
@@ -340,11 +340,18 @@ int main()
 	src1_fast.colRange(0, src1_fast.cols).copyTo(dst.colRange(0, src1_fast.cols));
 	src2_fast.colRange(0, src2_fast.cols).copyTo(dst.colRange(src1_fast.cols + 1, dst.cols));
 
-	descriptor desc1[Max],desc2[Max];
+	descriptor desc1[Max], desc2[Max];
 	GetBRIFE(src1_low, area1, desc1);
 	GetBRIFE(src2_low, area2, desc2);
-	CmpDescriptor(dst,desc1,desc2,num1, num2,src1.cols);
+	//debug
+	Mat dst1(src1.rows, src1.cols + src2.cols + 1, src1.type());
+	src1.colRange(0, src1.cols).copyTo(dst1.colRange(0, src1.cols));
+	src2.colRange(0, src2.cols).copyTo(dst1.colRange(src1.cols + 1, dst1.cols));
+
+	CmpDescriptor(dst, desc1, desc2, num1, num2, src1.cols, area1, area2);
 	imshow("特征点匹配", dst);
+	//CmpDescriptor(dst1, desc1, desc2, num1, num2, src1.cols, area1, area2);
+	//imshow("debug", dst1);
 
 	waitKey(0);
 	return 0;
