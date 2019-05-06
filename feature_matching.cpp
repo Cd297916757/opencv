@@ -9,12 +9,12 @@
 using namespace std;
 using namespace cv;
 
-#define k_size 3//卷积核大小
-#define sigma 1//sigma越大，平滑效果越明显
-#define threshold 30//FAST的阈值
+#define k_size 9//卷积核大小
+#define sigma 2//sigma越大，平滑效果越明显
+#define threshold 20//FAST的阈值//狗的图参数为20
 //=====BRIEF描述子部分=====
-#define s 10//半径
-#define Time 10//随机选取的点对//常见为256 //128,512
+#define s 31//半径//论文
+#define Time 15//随机选取的点对//过大堆栈溢出
 #define Max 1000//一张图中最多取多少特征点
 
 const double PI = 4.0*atan(1.0);//π
@@ -251,13 +251,17 @@ void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int nu
 		{
 			for (int k = 0; k < Time; k++)
 			{
+				if (desc1[i].p.x == 0 && desc1[i].p.y == 0)
+					break;
+				else if (desc2[i].p.x == 0 && desc2[i].p.y == 0)
+					break;
 				if (desc1[i].number[k] != desc2[j].number[k])
 					break;
 				if ((desc1[i].number[k] == desc2[j].number[k]) && (k == Time - 1))//match
 				{
 					p0.y = desc1[i].p.x;
 					p0.x = desc1[i].p.y;
-					p1.y = desc2[i].p.x;// +offset;
+					p1.y = desc2[i].p.x;
 					p1.x = desc2[i].p.y + offset;
 					line(src, p0, p1, Scalar(0, 0, 255));
 				}
@@ -356,3 +360,14 @@ int main()
 	waitKey(0);
 	return 0;
 }
+/*todo:
+1、两个描述子不需要完全一样，需要设定一个阈值，比如90%，超过阈值就认为两个点匹配（用异或操作）
+2、两个描述子随机选取不是点，取一个5x5的窗口，计算像素值的总和
+3、https://blog.csdn.net/qq_32998593/article/details/79221641
+https://blog.csdn.net/zouzoupaopao229/article/details/52625678
+4、非极大值抑制 对特征点的筛选
+从邻近的位置选取了多个特征点是另一个问题，我们可以使用Non-Maximal Suppression来解决。
+为每一个检测到的特征点计算它的响应大小（score function）V。这里V定义为点p和它周围16个像素点的绝对偏差的和。
+考虑两个相邻的特征点，并比较它们的V值。
+V值较低的点将会被删除。
+*/
