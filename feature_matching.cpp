@@ -5,17 +5,19 @@
 #include <opencv2/imgproc.hpp>
 #include <random>
 #include <vector>
+#include <string>
 
 using namespace std;
 using namespace cv;
 
 #define k_size 9//卷积核大小
 #define sigma 2//sigma越大，平滑效果越明显
-#define threshold 20//FAST的阈值//狗的图参数为20
+#define threshold 18//FAST的阈值//狗的图参数为20
 //=====BRIEF描述子部分=====
 #define s 31//半径//论文
-#define Time 15//随机选取的点对//过大堆栈溢出
-#define Max 1000//一张图中最多取多少特征点
+#define Time 128//随机选取的点对
+#define Min_match 115//最少多少个01码相等才认为匹配
+#define Max 5000//一张图中最多取多少特征点
 
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
@@ -40,17 +42,15 @@ class descriptor
 {
 public:
 	point p;
-	int number[Time];
-	//descriptor *next;
+	//int number[Time];
+	string code;
 	descriptor(int x, int y)
 	{
 		this->p = point(x, y);
-		//this->next = NULL;
 	}
 	descriptor()
 	{
 		this->p = point();
-		//this->next = NULL;
 	}
 };
 
@@ -88,7 +88,7 @@ int compare(uchar a, uchar b)
 {
 	if (a + threshold < b)
 		return 1;
-	else if (a - threshold > b)
+	else if (a > threshold + b)
 		return 1;
 	else
 		return 0;
@@ -100,7 +100,7 @@ void FAST(Mat src, Mat &area)
 	int row = src.rows;
 	int col = src.cols;
 	//原图片扩展0，否则后面循环矩阵越界
-	copyMakeBorder(src, src, 3, 3, 3, 3, BorderTypes::BORDER_CONSTANT);
+	copyMakeBorder(src, src, 3, 3, 3, 3, BorderTypes::BORDER_REFLECT_101);
 
 	int test[16];
 	int result[16];
@@ -190,34 +190,42 @@ void BRIEF(Mat src, descriptor &desc)
 	for (int i = 0; i < Time; i++)
 	{
 		p[i].x = GaussRand();
-		//if (p[i].x > s)
-			//cout << "error: " <<p[i].x << endl;
 		p[i].y = GaussRand();
-		//if (p[i].y > s)
-			//cout << "error: " << p[i].y << endl;
 	}
 	for (int i = 0; i < Time; i++)
 	{
 		q[i].x = GaussRand();
-		//if (q[i].x > s)
-			//cout << "error: " << p[i].x << endl;
 		q[i].y = GaussRand();
-		//if (q[i].y > s)
-			//cout << "error: " << p[i].y << endl;
 	}
 
+	//debug
+	//for (int i = 0; i < Time; i++)
+	//{
+	//	cout << "px=" << p[i].x << " py=" << p[i].y << endl;
+	//	cout << "qx=" << q[i].x << " qy=" << q[i].y << endl;
+	//}
+
+	int sum1 = 0, sum2 = 0;
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(src, src, s, s, s, s, BorderTypes::BORDER_CONSTANT);
+
 	for (int i = 0; i < Time; i++)
 	{
 		/*在最早的eccv2010的文章中，BRIEF使用的是pixel跟pixel的大小来构造描述子的每一个bit。
 		这样的后果就是对噪声敏感。因此，在ORB的方案中，做了这样的改进，不再使用pixel-pair，而是使用9×9的patch-pair。
 		也就是说，对比patch的像素值之和。（可以通过积分图快速计算）。*/
-		if (src.at<uchar>(s + desc.p.x + p[i].x, s + desc.p.y + p[i].y) >
-			src.at<uchar>(s + desc.p.x + q[i].x, s + desc.p.y + q[i].y))
-			desc.number[i] = 1;
+		for (int x = -4; x < 4; x++)
+		{
+			for (int y = -4; y < 4; y++)
+			{
+				sum1 += src.at<uchar>(s + desc.p.x + p[i].x + x, s + desc.p.y + p[i].y + y);
+				sum2 += src.at<uchar>(s + desc.p.x + q[i].x + x, s + desc.p.y + q[i].y + y);
+			}
+		}
+		if (sum1 >= sum2)
+			desc.code += '1';
 		else
-			desc.number[i] = 0;
+			desc.code += '0';
 	}
 }
 
@@ -241,30 +249,35 @@ void GetBRIFE(Mat src, Mat area, descriptor desc[Max])
 }
 
 //比较描述子的二进制码
-void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int num1, int num2, int offset, Mat area1, Mat area2)
+void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int num1, int num2, int offset)
 {
 	Point p0, p1;
 	bool flag = true;
+	int match;
 	for (int i = 0; i < num1; i++)
 	{
 		for (int j = 0; j < num2; j++)
 		{
+			match = 0;
 			for (int k = 0; k < Time; k++)
 			{
+				//排除异常点
 				if (desc1[i].p.x == 0 && desc1[i].p.y == 0)
 					break;
 				else if (desc2[i].p.x == 0 && desc2[i].p.y == 0)
 					break;
-				if (desc1[i].number[k] != desc2[j].number[k])
-					break;
-				if ((desc1[i].number[k] == desc2[j].number[k]) && (k == Time - 1))//match
-				{
-					p0.y = desc1[i].p.x;
-					p0.x = desc1[i].p.y;
-					p1.y = desc2[i].p.x;
-					p1.x = desc2[i].p.y + offset;
-					line(src, p0, p1, Scalar(0, 0, 255));
-				}
+				
+				if (desc1[i].code[k] == desc2[j].code[k])
+					match++;
+			}
+			//匹配个数超过阈值即认为特征点匹配
+			if (match >= Min_match)
+			{
+				p0.y = desc1[i].p.x;
+				p0.x = desc1[i].p.y;
+				p1.y = desc2[i].p.x;
+				p1.x = desc2[i].p.y + offset;
+				line(src, p0, p1, Scalar(0, 0, 255));
 			}
 		}
 	}
@@ -352,7 +365,7 @@ int main()
 	src1.colRange(0, src1.cols).copyTo(dst1.colRange(0, src1.cols));
 	src2.colRange(0, src2.cols).copyTo(dst1.colRange(src1.cols + 1, dst1.cols));
 
-	CmpDescriptor(dst, desc1, desc2, num1, num2, src1.cols, area1, area2);
+	CmpDescriptor(dst, desc1, desc2, num1, num2, src1.cols);
 	imshow("特征点匹配", dst);
 	//CmpDescriptor(dst1, desc1, desc2, num1, num2, src1.cols, area1, area2);
 	//imshow("debug", dst1);
@@ -361,11 +374,8 @@ int main()
 	return 0;
 }
 /*todo:
-1、两个描述子不需要完全一样，需要设定一个阈值，比如90%，超过阈值就认为两个点匹配（用异或操作）
-2、两个描述子随机选取不是点，取一个5x5的窗口，计算像素值的总和
-3、https://blog.csdn.net/qq_32998593/article/details/79221641
-https://blog.csdn.net/zouzoupaopao229/article/details/52625678
-4、非极大值抑制 对特征点的筛选
+1、如何排除背景这种特异值,可能还需要重新选取特征点，能匹配的本来就不多
+2、非极大值抑制 对特征点的筛选
 从邻近的位置选取了多个特征点是另一个问题，我们可以使用Non-Maximal Suppression来解决。
 为每一个检测到的特征点计算它的响应大小（score function）V。这里V定义为点p和它周围16个像素点的绝对偏差的和。
 考虑两个相邻的特征点，并比较它们的V值。
