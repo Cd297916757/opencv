@@ -11,16 +11,17 @@ using namespace std;
 using namespace cv;
 
 #define k_size 9//卷积核大小
-#define sigma 2//sigma越大，平滑效果越明显
-#define threshold 18//FAST的阈值//狗的图参数为20
+#define sigma 1.4//sigma越大，平滑效果越明显
+//#define Threshold 10//FAST的阈值，阈值一般为p点灰度值的20%
 //=====BRIEF描述子部分=====
 #define s 31//半径//论文
 #define Time 128//随机选取的点对
 #define Min_match 115//最少多少个01码相等才认为匹配
-#define Max 5000//一张图中最多取多少特征点
+#define Max 1000//一张图中最多取多少特征点
 
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
+int Threshold;
 
 class point {
 public:
@@ -86,9 +87,9 @@ Mat GaussianFilter(Mat src)
 //返回1可能为角点，返回0一定不是角点
 int compare(uchar a, uchar b)
 {
-	if (a + threshold < b)
-		return 1;
-	else if (a > threshold + b)
+	if (a + Threshold < b)
+		return -1;
+	else if (a > Threshold + b)
 		return 1;
 	else
 		return 0;
@@ -102,15 +103,15 @@ void FAST(Mat src, Mat &area)
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(src, src, 3, 3, 3, 3, BorderTypes::BORDER_REFLECT_101);
 
-	int test[16];
-	int result[16];
+	int test[16],result[16];
 	KeyPoint my_keypoint;
-
 	for (int i = 3; i < row + 3; i++)
 	{
 		for (int j = 3; j < col + 3; j++)
 		{
 			int sum = 0;
+			//阈值一般为p点灰度值的20%
+			Threshold = src.at<uchar>(i, j) *0.2;
 			//先检测1,5,9,13位置的像素点
 			test[0] = src.at<uchar>(i, j - 3);
 			test[4] = src.at<uchar>(i + 3, j);
@@ -123,7 +124,8 @@ void FAST(Mat src, Mat &area)
 
 			//判断是否是角点
 			sum = result[0] + result[1] + result[2] + result[3];
-			if (sum < 3)
+			
+			if (sum >= -2 && sum <= 2)
 				area.at<uchar>(i - 3, j - 3) = 0;
 			else
 			{
@@ -139,7 +141,7 @@ void FAST(Mat src, Mat &area)
 				test[13] = src.at<uchar>(i - 3, j - 1);
 				test[14] = src.at<uchar>(i - 2, j - 2);
 				test[15] = src.at<uchar>(i - 1, j - 3);
-				for (int k = 0; k < 16; k++)
+				for (int k = 1; k < 16; k++)
 					result[k] = compare(src.at<uchar>(i, j), test[k]);
 
 				//进一步判断是否连续12个角点的灰度值都大于当前点加阈值或小于当前点减阈值
@@ -148,7 +150,7 @@ void FAST(Mat src, Mat &area)
 				sum = 0;
 				for (int k = 0; k < 15; k++)
 					sum += result[k];
-				if (sum < 12)//不存在12个1
+				if (sum < 12 && sum > -12)//不存在12个1,-1
 					area.at<uchar>(i - 3, j - 3) = 0;
 				else
 				{
@@ -158,10 +160,12 @@ void FAST(Mat src, Mat &area)
 					{
 						for (int step = 0; step < 12; step++)
 						{
-							if (result[(k + step) % 16 == 1])
+							if (result[(k + step) % 16] == 1)
 								count++;
+							else if (result[(k + step) % 16] == -1)
+								count--;
 						}
-						if (count >= 12)
+						if (count >= 12 || count <= -12)
 							flag = true;
 					}
 					if (!flag)
@@ -207,7 +211,7 @@ void BRIEF(Mat src, descriptor &desc)
 
 	int sum1 = 0, sum2 = 0;
 	//原图片扩展0，否则后面循环矩阵越界
-	copyMakeBorder(src, src, s, s, s, s, BorderTypes::BORDER_CONSTANT);
+	copyMakeBorder(src, src, s, s, s, s, BorderTypes::BORDER_REFLECT_101);
 
 	for (int i = 0; i < Time; i++)
 	{
@@ -266,7 +270,7 @@ void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int nu
 					break;
 				else if (desc2[i].p.x == 0 && desc2[i].p.y == 0)
 					break;
-				
+
 				if (desc1[i].code[k] == desc2[j].code[k])
 					match++;
 			}
@@ -367,17 +371,20 @@ int main()
 
 	CmpDescriptor(dst, desc1, desc2, num1, num2, src1.cols);
 	imshow("特征点匹配", dst);
-	//CmpDescriptor(dst1, desc1, desc2, num1, num2, src1.cols, area1, area2);
-	//imshow("debug", dst1);
 
 	waitKey(0);
 	return 0;
 }
 /*todo:
-1、如何排除背景这种特异值,可能还需要重新选取特征点，能匹配的本来就不多
+1、背景中的特征点过多
 2、非极大值抑制 对特征点的筛选
 从邻近的位置选取了多个特征点是另一个问题，我们可以使用Non-Maximal Suppression来解决。
 为每一个检测到的特征点计算它的响应大小（score function）V。这里V定义为点p和它周围16个像素点的绝对偏差的和。
 考虑两个相邻的特征点，并比较它们的V值。
 V值较低的点将会被删除。
+3、
+需要注意一下这里的匹配策略。从所有描述子中找两两距离最近的配对，配对后还需要进行一次筛选。
+这是因为所有特征点都参与了配对，但实际上有些特征点可能并没有在两张图中同时出现，因此误配对的情况还是很多的。
+筛选策略是，当描述子之间的距离大于所有配对的描述子的最小距离的两倍时，认为匹配有误。
+同时，还需要设置一个经验值30，以防最小距离过小。
 */
