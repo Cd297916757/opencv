@@ -21,7 +21,7 @@ using namespace cv;
 
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
-int Threshold;
+int Threshold;//阈值
 
 class point {
 public:
@@ -84,7 +84,7 @@ Mat GaussianFilter(Mat src)
 	return dst;
 }
 
-//返回1可能为角点，返回0一定不是角点
+//返回1和-1可能为角点，返回0一定不是角点
 int compare(uchar a, uchar b)
 {
 	if (a + Threshold < b)
@@ -100,10 +100,10 @@ void FAST(Mat src, Mat &area)
 {
 	int row = src.rows;
 	int col = src.cols;
-	//原图片扩展0，否则后面循环矩阵越界
+	//原图片复制扩展，否则后面循环矩阵越界
 	copyMakeBorder(src, src, 3, 3, 3, 3, BorderTypes::BORDER_REFLECT_101);
 
-	int test[16],result[16];
+	int test[16], result[16];
 	KeyPoint my_keypoint;
 	for (int i = 3; i < row + 3; i++)
 	{
@@ -111,7 +111,7 @@ void FAST(Mat src, Mat &area)
 		{
 			int sum = 0;
 			//阈值一般为p点灰度值的20%
-			Threshold = src.at<uchar>(i, j) *0.2;
+			Threshold = src.at<uchar>(i, j) *0.2;//自动类型转换
 			//先检测1,5,9,13位置的像素点
 			test[0] = src.at<uchar>(i, j - 3);
 			test[4] = src.at<uchar>(i + 3, j);
@@ -124,7 +124,6 @@ void FAST(Mat src, Mat &area)
 
 			//判断是否是角点
 			sum = result[0] + result[1] + result[2] + result[3];
-			
 			if (sum >= -2 && sum <= 2)
 				area.at<uchar>(i - 3, j - 3) = 0;
 			else
@@ -145,30 +144,27 @@ void FAST(Mat src, Mat &area)
 					result[k] = compare(src.at<uchar>(i, j), test[k]);
 
 				//进一步判断是否连续12个角点的灰度值都大于当前点加阈值或小于当前点减阈值
-				bool flag = false;
-				int count = 0;
+				bool flag = true;
 				sum = 0;
-				for (int k = 0; k < 15; k++)
+				for (int k = 0; k < 16; k++)
 					sum += result[k];
-				if (sum < 12 && sum > -12)//不存在12个1,-1
+				if (sum < 12 && sum > -12)//不存在12个1或者-1
 					area.at<uchar>(i - 3, j - 3) = 0;
 				else
 				{
-					//应该是个环
-					count = 0;
-					for (int k = 0; k < 15; k++)
+					//起点
+					for (int k = 0; k < 16; k++)
 					{
 						for (int step = 0; step < 12; step++)
 						{
-							if (result[(k + step) % 16] == 1)
-								count++;
-							else if (result[(k + step) % 16] == -1)
-								count--;
+							if (result[(k + step) % 16] != result[k])
+							{
+								flag = false;
+								break;
+							}
 						}
-						if (count >= 12 || count <= -12)
-							flag = true;
 					}
-					if (!flag)
+					if (flag)
 						area.at<uchar>(i - 3, j - 3) = 0;
 				}
 			}
@@ -291,6 +287,8 @@ int main()
 {
 	Mat src1 = imread("1.jpg");
 	Mat src2 = imread("2.jpg");
+	//Mat src1 = imread("1.png");
+	//Mat src2 = imread("2.png");
 	//判断图像是否加载成功
 	if (src1.data && src2.data)
 		cout << "图像加载成功!" << endl;
@@ -330,8 +328,6 @@ int main()
 		{
 			if (area1.at<uchar>(i, j) == 255)
 			{
-				//src1_fast.at<Vec3b>(i, j) = 0;
-				//src1_fast.at<Vec3b>(i, j)[2] = 255;
 				my_keypoint = KeyPoint(j, i, 1);
 				keypoint_vector1.push_back(my_keypoint);
 				num1++;
