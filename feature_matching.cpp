@@ -11,13 +11,14 @@ using namespace std;
 using namespace cv;
 
 #define k_size 9//卷积核大小
-#define sigma 1.4//sigma越大，平滑效果越明显
-//#define Threshold 10//FAST的阈值，阈值一般为p点灰度值的20%
+#define sigma 2//sigma越大，平滑效果越明显
+//#define Threshold 20//FAST的阈值
 //=====BRIEF描述子部分=====
 #define s 31//半径//论文
-#define Time 128//随机选取的点对
-#define Min_match 115//最少多少个01码相等才认为匹配
+#define Time 31//随机选取的点对
+#define Min_match 25//最少多少个01码相等才认为匹配
 #define Max 1000//一张图中最多取多少特征点
+#define Min_distance 30//匹配的最小距离
 
 const double PI = 4.0*atan(1.0);//π
 double gaus[k_size][k_size];
@@ -43,15 +44,38 @@ class descriptor
 {
 public:
 	point p;
-	//int number[Time];
 	string code;
+	bool matching;
 	descriptor(int x, int y)
 	{
 		this->p = point(x, y);
+		matching = false;
 	}
 	descriptor()
 	{
 		this->p = point();
+		matching = false;
+	}
+};
+
+class match
+{
+public:
+	point p;
+	point q;
+	bool matching;
+	float distance;
+	match(int x, int y, int i, int j, float dis)
+	{
+		this->p = point(x, y);
+		this->q = point(i, j);
+		distance = dis;
+	}
+	match()
+	{
+		this->p = point();
+		this->q = point();
+		distance = 0;
 	}
 };
 
@@ -112,7 +136,7 @@ void FAST(Mat src, Mat &area)
 			int sum = 0;
 			//阈值一般为p点灰度值的20%
 			Threshold = src.at<uchar>(i, j) *0.2;//自动类型转换
-			//先检测1,5,9,13位置的像素点
+												 //先检测1,5,9,13位置的像素点
 			test[0] = src.at<uchar>(i, j - 3);
 			test[4] = src.at<uchar>(i + 3, j);
 			test[8] = src.at<uchar>(i, j + 3);
@@ -186,46 +210,47 @@ double GaussRand()
 void BRIEF(Mat src, descriptor &desc)
 {
 	//生成符合高斯分布的随机坐标
-	point p[Time], q[Time];
-	for (int i = 0; i < Time; i++)
-	{
-		p[i].x = GaussRand();
-		p[i].y = GaussRand();
-	}
-	for (int i = 0; i < Time; i++)
-	{
-		q[i].x = GaussRand();
-		q[i].y = GaussRand();
-	}
-
-	//debug
+	//point p[Time], q[Time];
 	//for (int i = 0; i < Time; i++)
 	//{
-	//	cout << "px=" << p[i].x << " py=" << p[i].y << endl;
-	//	cout << "qx=" << q[i].x << " qy=" << q[i].y << endl;
+	//	p[i].x = GaussRand();
+	//	p[i].y = GaussRand();
+	//}
+	//for (int i = 0; i < Time; i++)
+	//{
+	//	q[i].x = GaussRand();
+	//	q[i].y = GaussRand();
 	//}
 
+	point p[s];// , q[s];
+	for (int i = 0; i < s; i++)
+	{
+		p[i].x = i - s / 2;
+		p[i].y = i - s / 2;
+		//q[i].x = i;
+		//q[i].y = i;
+	}
 	int sum1 = 0, sum2 = 0;
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(src, src, s, s, s, s, BorderTypes::BORDER_REFLECT_101);
 
 	for (int i = 0; i < Time; i++)
 	{
-		/*在最早的eccv2010的文章中，BRIEF使用的是pixel跟pixel的大小来构造描述子的每一个bit。
-		这样的后果就是对噪声敏感。因此，在ORB的方案中，做了这样的改进，不再使用pixel-pair，而是使用9×9的patch-pair。
-		也就是说，对比patch的像素值之和。（可以通过积分图快速计算）。*/
-		for (int x = -4; x < 4; x++)
-		{
-			for (int y = -4; y < 4; y++)
-			{
-				sum1 += src.at<uchar>(s + desc.p.x + p[i].x + x, s + desc.p.y + p[i].y + y);
-				sum2 += src.at<uchar>(s + desc.p.x + q[i].x + x, s + desc.p.y + q[i].y + y);
-			}
-		}
-		if (sum1 >= sum2)
-			desc.code += '1';
-		else
-			desc.code += '0';
+		//for (int x = -4; x <= 4; x++)
+		//{
+		//	for (int y = -4; y <= 4; y++)
+		//	{
+		//		sum1 += src.at<uchar>(s + desc.p.x + p[i].x + x, s + desc.p.y + p[i].y + y);
+		//		sum2 += src.at<uchar>(s + desc.p.x + q[i].x + x, s + desc.p.y + q[i].y + y);
+		//	}
+		//}
+		sum1 = src.at<uchar>(s + desc.p.x + p[i].x, s + desc.p.y + p[i].y);
+		//sum2 = src.at<uchar>(s + desc.p.x, s + desc.p.y);
+		desc.code += sum1;
+		//if (sum1 >= sum2)
+			//desc.code += '1';
+		//else
+			//desc.code += '0';
 	}
 }
 
@@ -248,47 +273,93 @@ void GetBRIFE(Mat src, Mat area, descriptor desc[Max])
 	}
 }
 
+float getDistance(Point pointO, Point pointA)
+{
+	float distance;
+	distance = powf((pointO.x - pointA.x), 2) + powf((pointO.y - pointA.y), 2);
+	distance = sqrtf(distance);
+	return distance;
+}
+
 //比较描述子的二进制码
 void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int num1, int num2, int offset)
 {
 	Point p0, p1;
 	bool flag = true;
-	int match;
+	int match_num, Max_match;
+	float min_distance = 1000;
+	descriptor maybe_match;
+	match best_match[Max];
+	int temp = 0;
 	for (int i = 0; i < num1; i++)
 	{
-		for (int j = 0; j < num2; j++)
+		Max_match = Min_match;
+		maybe_match = descriptor();
+		int j;
+		for (j = 0; j < num2; j++)
 		{
-			match = 0;
+			//排除异常点
+			if (desc1[i].p.x == 0 && desc1[i].p.y == 0)
+				break;
+			else if (desc2[j].p.x == 0 && desc2[j].p.y == 0)
+				break;
+			else if (desc2[j].matching)
+				break;
+			match_num = 0;
 			for (int k = 0; k < Time; k++)
 			{
-				//排除异常点
-				if (desc1[i].p.x == 0 && desc1[i].p.y == 0)
-					break;
-				else if (desc2[i].p.x == 0 && desc2[i].p.y == 0)
-					break;
-
-				if (desc1[i].code[k] == desc2[j].code[k])
-					match++;
+				if (abs(desc1[i].code[k] - desc2[j].code[k]) < 20)
+					match_num++;
 			}
-			//匹配个数超过阈值即认为特征点匹配
-			if (match >= Min_match)
+			//匹配个数超过阈值即可能匹配
+			if (match_num > Max_match)
 			{
-				p0.y = desc1[i].p.x;
-				p0.x = desc1[i].p.y;
-				p1.y = desc2[i].p.x;
-				p1.x = desc2[i].p.y + offset;
-				line(src, p0, p1, Scalar(0, 0, 255));
+				Max_match = match_num;
+				maybe_match.p.x = desc2[j].p.x;
+				maybe_match.p.y = desc2[j].p.y;
 			}
 		}
+		if (maybe_match.p.x != 0 && maybe_match.p.y != 0)
+		{
+			best_match[temp].p = desc1[i].p;
+			best_match[temp].q = maybe_match.p;
+			desc2[j].matching = true;
+			temp++;
+		}
+	}
+
+	for (int k = 0; k < temp; k++)
+	{
+		if (best_match[k].q.x != 0 && best_match[k].q.y != 0)
+		{
+			//筛选
+			p0.y = best_match[k].p.x;
+			p0.x = best_match[k].p.y;
+			p1.y = best_match[k].q.x;
+			p1.x = best_match[k].q.y + offset;
+			best_match[k].distance = getDistance(p0, p1);
+			if (best_match[k].distance < min_distance)
+				min_distance = best_match[k].distance;
+		}
+	}
+	for (int k = 0; k < temp; k++)
+	{
+		//if (best_match[k].distance < 2 * min_distance && best_match[k].distance > 2 * Min_distance)
+		//if (best_match[k].distance > 2 * Min_distance)
+		//{
+		p0.y = best_match[k].p.x;
+		p0.x = best_match[k].p.y;
+		p1.y = best_match[k].q.x;
+		p1.x = best_match[k].q.y + offset;
+		line(src, p0, p1, Scalar(0, 0, 255));
+		//}
 	}
 }
 
 int main()
 {
-	Mat src1 = imread("1.jpg");
-	Mat src2 = imread("2.jpg");
-	//Mat src1 = imread("1.png");
-	//Mat src2 = imread("2.png");
+	Mat src1 = imread("3.png");
+	Mat src2 = imread("4.png");
 	//判断图像是否加载成功
 	if (src1.data && src2.data)
 		cout << "图像加载成功!" << endl;
@@ -318,7 +389,7 @@ int main()
 	Mat src1_fast = src1.clone();
 	Mat src2_fast = src2.clone();
 	int num1 = 0, num2 = 0;//特征点的数量
-	//使用vector存储keypoint
+						   //使用vector存储keypoint
 	vector <KeyPoint> keypoint_vector1, keypoint_vector2;
 	KeyPoint my_keypoint;
 
@@ -360,10 +431,6 @@ int main()
 	descriptor desc1[Max], desc2[Max];
 	GetBRIFE(src1_low, area1, desc1);
 	GetBRIFE(src2_low, area2, desc2);
-	//debug
-	Mat dst1(src1.rows, src1.cols + src2.cols + 1, src1.type());
-	src1.colRange(0, src1.cols).copyTo(dst1.colRange(0, src1.cols));
-	src2.colRange(0, src2.cols).copyTo(dst1.colRange(src1.cols + 1, dst1.cols));
 
 	CmpDescriptor(dst, desc1, desc2, num1, num2, src1.cols);
 	imshow("特征点匹配", dst);
@@ -371,16 +438,3 @@ int main()
 	waitKey(0);
 	return 0;
 }
-/*todo:
-1、背景中的特征点过多
-2、非极大值抑制 对特征点的筛选
-从邻近的位置选取了多个特征点是另一个问题，我们可以使用Non-Maximal Suppression来解决。
-为每一个检测到的特征点计算它的响应大小（score function）V。这里V定义为点p和它周围16个像素点的绝对偏差的和。
-考虑两个相邻的特征点，并比较它们的V值。
-V值较低的点将会被删除。
-3、
-需要注意一下这里的匹配策略。从所有描述子中找两两距离最近的配对，配对后还需要进行一次筛选。
-这是因为所有特征点都参与了配对，但实际上有些特征点可能并没有在两张图中同时出现，因此误配对的情况还是很多的。
-筛选策略是，当描述子之间的距离大于所有配对的描述子的最小距离的两倍时，认为匹配有误。
-同时，还需要设置一个经验值30，以防最小距离过小。
-*/
