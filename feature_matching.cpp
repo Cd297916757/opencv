@@ -15,8 +15,8 @@ using namespace cv;
 //#define Threshold 20//FAST的阈值
 //=====BRIEF描述子部分=====
 #define s 31//半径//论文
-#define Time 31//随机选取的点对
-#define Min_match 25//最少多少个01码相等才认为匹配
+#define Time 512 //随机选取的点对
+#define Min_match 150//最少多少个01码相等才认为匹配
 #define Max 1000//一张图中最多取多少特征点
 #define Min_distance 30//匹配的最小距离
 
@@ -210,26 +210,17 @@ double GaussRand()
 void BRIEF(Mat src, descriptor &desc)
 {
 	//生成符合高斯分布的随机坐标
-	//point p[Time], q[Time];
-	//for (int i = 0; i < Time; i++)
-	//{
-	//	p[i].x = GaussRand();
-	//	p[i].y = GaussRand();
-	//}
+	point p[Time];// , q[Time];
+	for (int i = 0; i < Time; i++)
+	{
+		p[i].x = GaussRand();
+		p[i].y = GaussRand();
+	}
 	//for (int i = 0; i < Time; i++)
 	//{
 	//	q[i].x = GaussRand();
 	//	q[i].y = GaussRand();
 	//}
-
-	point p[s];// , q[s];
-	for (int i = 0; i < s; i++)
-	{
-		p[i].x = i - s / 2;
-		p[i].y = i - s / 2;
-		//q[i].x = i;
-		//q[i].y = i;
-	}
 	int sum1 = 0, sum2 = 0;
 	//原图片扩展0，否则后面循环矩阵越界
 	copyMakeBorder(src, src, s, s, s, s, BorderTypes::BORDER_REFLECT_101);
@@ -247,10 +238,10 @@ void BRIEF(Mat src, descriptor &desc)
 		sum1 = src.at<uchar>(s + desc.p.x + p[i].x, s + desc.p.y + p[i].y);
 		//sum2 = src.at<uchar>(s + desc.p.x, s + desc.p.y);
 		desc.code += sum1;
-		//if (sum1 >= sum2)
-			//desc.code += '1';
-		//else
-			//desc.code += '0';
+		/*if (sum1 >= sum2)
+			desc.code += '1';
+		else
+			desc.code += '0'*/;
 	}
 }
 
@@ -288,15 +279,12 @@ void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int nu
 	bool flag = true;
 	int match_num, Max_match;
 	float min_distance = 1000;
-	descriptor maybe_match;
 	match best_match[Max];
-	int temp = 0;
+	int temp = 0,num = 0;
 	for (int i = 0; i < num1; i++)
 	{
 		Max_match = Min_match;
-		maybe_match = descriptor();
-		int j;
-		for (j = 0; j < num2; j++)
+		for (int j = 0; j < num2; j++)
 		{
 			//排除异常点
 			if (desc1[i].p.x == 0 && desc1[i].p.y == 0)
@@ -304,30 +292,35 @@ void CmpDescriptor(Mat src, descriptor desc1[Max], descriptor desc2[Max], int nu
 			else if (desc2[j].p.x == 0 && desc2[j].p.y == 0)
 				break;
 			else if (desc2[j].matching)
-				break;
+				continue;
 			match_num = 0;
 			for (int k = 0; k < Time; k++)
 			{
-				if (abs(desc1[i].code[k] - desc2[j].code[k]) < 20)
+				//int threshold = src.at<uchar>(desc1[i].p.x, desc1[i].p.y) * 0.2;
+				if (abs(desc1[i].code[k] - desc2[j].code[k]) < 10)
+				//if (desc1[i].code[k] == desc2[j].code[k])
 					match_num++;
 			}
 			//匹配个数超过阈值即可能匹配
 			if (match_num > Max_match)
 			{
 				Max_match = match_num;
-				maybe_match.p.x = desc2[j].p.x;
-				maybe_match.p.y = desc2[j].p.y;
+				num = j;
 			}
 		}
-		if (maybe_match.p.x != 0 && maybe_match.p.y != 0)
+		if (desc2[num].p.x != 0 && desc2[num].p.y != 0 && (Max_match != Min_match))
 		{
 			best_match[temp].p = desc1[i].p;
-			best_match[temp].q = maybe_match.p;
-			desc2[j].matching = true;
+			best_match[temp].q = desc2[num].p;
+			desc2[num].matching = true;
 			temp++;
 		}
 	}
-
+	for (int x = 0; x < num2; x++)
+	{
+		if (desc2[x].matching)
+			cout << "matching" << endl;
+	}
 	for (int k = 0; k < temp; k++)
 	{
 		if (best_match[k].q.x != 0 && best_match[k].q.y != 0)
